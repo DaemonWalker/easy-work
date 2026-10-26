@@ -1,0 +1,10 @@
+import type{Conversation,ImageTask,Settings,State}from'./types';
+export async function request<T>(url:string,init?:RequestInit):Promise<T>{const response=await fetch(url,init);if(!response.ok){let message=`HTTP ${response.status}`;try{const body=await response.json() as{error?:string};message=body.error||message}catch{/* ignore */}throw new Error(message)}return response.json() as Promise<T>}
+export const getState=()=>request<State>('/api/state');
+export const getConversations=(tab:string)=>request<Conversation[]>(`/api/conversations?tab=${tab}`);
+export const getImages=()=>request<ImageTask[]>('/api/images');
+export const saveSettings=(settings:Settings)=>request<Settings>('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
+export function savePreferences(body:Record<string,unknown>){return request<Settings>('/api/preferences',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+export type SSEHandler=(event:string,data:any)=>void;
+export async function stream(url:string,body:BodyInit|undefined,onEvent:SSEHandler,headers:Record<string,string>={}){const response=await fetch(url,{method:'POST',body,headers});if(!response.ok){let message=`HTTP ${response.status}`;try{const payload=await response.json() as{error?:string};message=payload.error||message}catch{/* ignore */}throw new Error(message)}if(!response.body)throw new Error('浏览器不支持流式响应');const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';const consume=(block:string)=>{const lines=block.split(/\r?\n/);let event='message',data='';for(const line of lines){if(line.startsWith('event:'))event=line.slice(6).trim();else if(line.startsWith('data:'))data+=(data?'\n':'')+line.slice(5).trimStart()}if(data)onEvent(event,JSON.parse(data))};while(true){const{done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});const parts=buffer.split(/\r?\n\r?\n/);buffer=parts.pop()||'';parts.forEach(consume);if(done)break}if(buffer.trim())consume(buffer)}
+export const jsonHeaders={'Content-Type':'application/json'};

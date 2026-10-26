@@ -1,0 +1,15 @@
+export type ModelTab='colleague'|'document'|'testcase'|'ja2zh'|'custom';
+export type Tab=ModelTab|'images'|'romaji';
+export type RomajiMode='normal'|'spaced'|'okurigana'|'furigana';
+export interface GenerationSettings{temperature:number|null;top_p:number|null;top_k:number|null;min_p:number|null;repeat_penalty:number|null;max_tokens:number}
+export interface Settings{theme:string;threads:number;context:number;generation:GenerationSettings;tab_models:Record<ModelTab,string>;image_model:string;image_translate:boolean}
+export interface Stats{[key:string]:unknown;prompt_n?:number;cache_n?:number;predicted_n?:number;total_context?:number;ttft_ms?:number;load_ms?:number;ocr_ms?:number;prompt_ms?:number;predicted_ms?:number;prompt_per_second?:number;predicted_per_second?:number}
+export interface Message{id:string;role:'user'|'assistant';content:string;model?:string;romaji_mode?:RomajiMode;stats?:Stats;created_at:string}
+export interface Conversation{id:string;tab:ModelTab;title:string;model:string;messages:Message[];context_used:number;created_at:string;updated_at:string}
+export interface ModelInfo{id:string;kind:'chat'|'vl';name:string;path:string;size:number;max_context:number;meta?:Record<string,unknown>}
+export interface ModelStatus{kind:'chat'|'vl';model:string;status:'unloaded'|'loading'|'loaded'|'unloading'|'failed';error?:string;restart_count:number;load_ms:number;details?:Record<string,unknown>}
+export interface GlobalTask{busy:boolean;task_id:string;kind:string;stage:string}
+export interface Hardware{cpu:number;memory_used:number;memory_total:number;memory_available:number;refresh_seconds:number}
+export interface State{settings:Settings;models:ModelInfo[];status:ModelStatus[];task:GlobalTask;hardware:Hardware}
+export interface ImageTask{id:string;filename:string;mime:string;width:number;height:number;ocr:string;translation:string;ocr_stats?:Stats;translation_stats?:Stats;created_at:string;updated_at:string}
+export interface Run{kind:'chat'|'image';tab?:ModelTab;conversationId?:string;imageId?:string;draft:string;translationDraft:string;status:string;error:string}

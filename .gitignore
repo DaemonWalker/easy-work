@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Frontend build and cache
+frontend/dist/
+frontend/public/dict/
+*.tsbuildinfo
+.vite/
+
+# Release output and local runtime resources
+/build/
+/gguf/
+/llamacpp/
+/history/
+
+# Go build and test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Operating systems
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
