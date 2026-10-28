@@ -26,6 +26,7 @@ Go 服务端（EasyWork.exe）
 | 文件 | 职责 |
 | --- | --- |
 | `backend/main.go` | 启动参数、监听地址、浏览器打开和退出清理 |
+| `backend/logging.go` | 控制台与文件双写、按天切换和文件不可用时的控制台降级 |
 | `backend/api.go` | HTTP 路由、参数校验、对话与模型 API |
 | `backend/models.go` | 模型扫描、内存检查、加载／卸载、健康检查与崩溃恢复 |
 | `backend/stream.go` | llama.cpp 流式响应、统计信息与 SSE 转发 |
@@ -60,13 +61,13 @@ Go 服务端（EasyWork.exe）
 - 只有真正执行任务时才加载或切换模型。
 - 最多保留一个 Chat 和一个 VL 进程，同类模型不能同时加载多个。
 - Chat 和 VL 分别管理状态与卸载，但模型切换操作本身需要串行化。
-- 加载 Chat 时至少保留 4 GB 可用内存，加载 VL 时至少保留 2 GB；内存不足时按既有规则卸载另一类模型。
+- 启动 Chat 前可用内存低于 4 GB 时卸载已加载的 VL，启动 VL 前可用内存低于 2 GB 时卸载已加载的 Chat。内存阈值只用于模型切换，不会因内存不足拒绝加载。
 - VL 必须加载配对的 mmproj 文件。
 - 退出时清理所有由服务端启动的模型进程；异常重启不得无限重试。
 
 ### 数据一致性
 
-- 所有持久化运行数据集中在 `history/`，不要写入其他位置。
+- 持久化业务运行数据集中在 `history/`，日志独立保存在 `log/`。
 - 普通回复只有在完整成功后才保存；停止、断流或失败时保留用户消息，但不保存不完整回复及统计。
 - 图片 OCR 成功后立即保存原图和完整 OCR 结果。后续翻译失败或停止，不得破坏已保存的 OCR。
 - 不完整 OCR 或翻译不能覆盖此前完整结果。
@@ -87,10 +88,13 @@ Go 服务端（EasyWork.exe）
 | `history/conversations.json` | 各普通页面的独立对话历史 |
 | `history/images.json` | 图片任务元数据、OCR 和翻译结果 |
 | `history/images/` | 原始图片 |
-| `history/chat-server.log` | Chat llama-server 输出 |
-| `history/vl-server.log` | VL llama-server 输出 |
+| `log/easywork-YYYY-MM-DD.log` | 后端关键操作、错误、完整请求与模型输出 |
+| `log/chat-server-YYYY-MM-DD.log` | Chat llama-server 输出 |
+| `log/vl-server-YYYY-MM-DD.log` | VL llama-server 输出 |
 
 JSON 写入采用临时文件加重命名。修改存储结构时应考虑已有数据读取，避免无提示破坏用户历史。
+
+三类日志均同时输出到控制台，按本地日期每日拆分并永久保留。文件创建或写入失败时仅降级到控制台，不影响服务运行。日志包含完整文本，可能含有敏感信息。
 
 ## 扩展时的检查点
 

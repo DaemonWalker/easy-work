@@ -9,9 +9,11 @@ frontend/public/dict/
 
 # Release output and local runtime resources
 /build/
+/EasyWork.7z
 /gguf/
 /llamacpp/
 /history/
+/log/
 
 # Go build and test artifacts
 *.exe

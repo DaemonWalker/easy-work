@@ -1,0 +1,2 @@
+const SECOND_PERSON=/(あなた(?:たち|方)?)/g;
+export default function JaText({text,hint}:{text:string;hint:boolean}){const parts=text.split(SECOND_PERSON);const hits=(parts.length-1)/2;return<>{parts.map((part,i)=>i%2?<mark key={i}className="second-person">{part}</mark>:part)}{hint&&hits>0&&<div className="second-person-hint"role="status"><strong>「あなた」出现 {hits} 处</strong><span>日语里对同事一般不用「あなた」，请替换为对方姓名「〇〇さん」后再发送。</span></div>}</>}

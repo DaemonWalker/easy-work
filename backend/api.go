@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -145,8 +146,9 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 			} else {
 				kinds = []string{"chat"}
 			}
+			log.Printf("设置变更触发模型重载: kinds=%v", kinds)
 			if err := a.models.Reload(kinds...); err != nil {
-				fmt.Printf("设置重载失败: %v\n", err)
+				log.Printf("设置重载失败: %v", err)
 			}
 		}()
 	}
@@ -278,6 +280,7 @@ func (a *App) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Text = strings.TrimSpace(body.Text)
+	log.Printf("用户输入: conversation=%s tab=%s model=%s edit_id=%s\n%s", conversationID, c.Tab, body.Model, body.EditID, body.Text)
 	taskID, ctx, err := a.tasks.Start(r.Context(), "chat")
 	if err != nil {
 		fail(w, 409, err.Error())
@@ -363,6 +366,7 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model,
 	send("status", map[string]string{"stage": "加载 Chat 模型"})
 	info := a.models.models[model]
 	if info.MaxContext > 0 && a.store.Settings().Context > info.MaxContext {
+		log.Printf("Chat 上下文配置错误: task=%s conversation=%s context=%d max_context=%d", taskID, c.ID, a.store.Settings().Context, info.MaxContext)
 		send("error", map[string]string{"error": "当前 Chat 上下文超过模型最大能力，请修改设置"})
 		return
 	}
@@ -382,15 +386,18 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model,
 	send("status", map[string]string{"stage": "检查上下文"})
 	tokens, err := a.models.countTokens(ctx, messages)
 	if err != nil {
+		log.Printf("Chat Token 检查失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
 		send("error", map[string]string{"error": err.Error()})
 		return
 	}
 	contextSize := a.store.Settings().Context
 	if tokens > contextSize {
+		log.Printf("Chat 输入超过上下文: task=%s conversation=%s tokens=%d context=%d", taskID, c.ID, tokens, contextSize)
 		send("error", map[string]string{"error": fmt.Sprintf("输入共 %d Token，超过当前实际上下文 %d；请新建对话。不会自动裁剪历史", tokens, contextSize)})
 		return
 	}
 	if _, err = a.store.UpdateConversation(c.ID, func(v *Conversation) error { v.ContextUsed = tokens; return nil }); err != nil {
+		log.Printf("上下文统计保存失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
 		send("error", map[string]string{"error": "上下文统计保存失败"})
 		return
 	}
@@ -408,8 +415,10 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model,
 		return nil
 	})
 	if err != nil {
+		log.Printf("完整回复保存失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
 		send("error", map[string]string{"error": "完整回复保存失败"})
 		return
 	}
+	log.Printf("Chat 回复已保存: task=%s conversation=%s message=%s", taskID, c.ID, assistant.ID)
 	send("complete", saved)
 }

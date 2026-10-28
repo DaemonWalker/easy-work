@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -117,6 +118,7 @@ func (a *App) runOCR(ctx context.Context, taskID string, task ImageTask, mime st
 	}
 	a.tasks.Stage(taskID, "OCR 识别")
 	send("status", map[string]string{"stage": "OCR 识别"})
+	log.Printf("OCR 开始: task=%s image=%s filename=%s mime=%s width=%d height=%d bytes=%d", taskID, task.ID, task.Filename, mime, task.Width, task.Height, len(data))
 	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 	messages := []chatMessage{{Role: "user", Content: []any{map[string]any{"type": "text", "text": "OCR:"}, map[string]any{"type": "image_url", "image_url": map[string]string{"url": url}}}}}
 	started := time.Now()
@@ -128,13 +130,16 @@ func (a *App) runOCR(ctx context.Context, taskID string, task ImageTask, mime st
 	result.Stats["ocr_ms"] = time.Since(started).Milliseconds()
 	saved, err := a.store.UpdateImage(task.ID, func(v *ImageTask) error { v.OCR = result.Text; v.OCRStats = result.Stats; return nil })
 	if err != nil {
+		log.Printf("OCR 结果保存失败: task=%s image=%s error=%v", taskID, task.ID, err)
 		send("error", map[string]string{"error": "OCR 结果保存失败"})
 		return
 	}
+	log.Printf("OCR 完成并保存: task=%s image=%s ocr_ms=%d", taskID, task.ID, result.Stats["ocr_ms"])
 	send("ocr_complete", saved)
 	if a.store.Settings().ImageTranslate {
 		model := a.store.Settings().ImageModel
 		if model == "" {
+			log.Printf("OCR 后的自动翻译未执行: task=%s image=%s 未选择翻译模型", taskID, task.ID)
 			send("error", map[string]string{"error": "OCR 已完成；请选择图像翻译模型"})
 			return
 		}
@@ -143,10 +148,12 @@ func (a *App) runOCR(ctx context.Context, taskID string, task ImageTask, mime st
 }
 func (a *App) runTranslation(ctx context.Context, taskID string, task ImageTask, model string, send func(string, any)) {
 	if task.OCR == "" {
+		log.Printf("图像翻译失败: task=%s image=%s 没有完整 OCR 结果", taskID, task.ID)
 		send("error", map[string]string{"error": "没有可翻译的完整 OCR 结果"})
 		return
 	}
 	if !isTranslationModel(model) {
+		log.Printf("图像翻译失败: task=%s image=%s 非法模型=%s", taskID, task.ID, model)
 		send("error", map[string]string{"error": "图像翻译只能使用指定 Chat 翻译模型"})
 		return
 	}
@@ -166,9 +173,11 @@ func (a *App) runTranslation(ctx context.Context, taskID string, task ImageTask,
 	}
 	saved, err := a.store.UpdateImage(task.ID, func(v *ImageTask) error { v.Translation = result.Text; v.TranslationStats = result.Stats; return nil })
 	if err != nil {
+		log.Printf("翻译结果保存失败: task=%s image=%s error=%v", taskID, task.ID, err)
 		send("error", map[string]string{"error": "翻译结果保存失败"})
 		return
 	}
+	log.Printf("图像翻译完成并保存: task=%s image=%s model=%s", taskID, task.ID, model)
 	send("translation_complete", saved)
 }
 func (a *App) handleImageRetry(w http.ResponseWriter, r *http.Request, imageID string) {

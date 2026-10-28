@@ -21,6 +21,9 @@ go -C backend test ./...
 # 标准构建：测试、前端构建、后端编译、组装 build/
 .\build.ps1
 
+# 构建后以 7-Zip 最高压缩级别生成 EasyWork.7z
+.\build.ps1 -Package
+
 # 启动构建结果
 .\build\EasyWork.exe -no-browser
 ```
@@ -43,16 +46,19 @@ npm run build
 build/
 ├── EasyWork.exe
 ├── html/
-└── history/
+├── history/
+└── log/
 ```
 
-脚本故意不把 `gguf/` 和 `llamacpp/` 放入发布产物。真实运行前需手动复制这两组资源。
+脚本会保留 `build/gguf/` 和 `build/llamacpp/`，但不会将它们放入发布压缩包。首次运行前需手动复制这两组资源。
 
-**构建会先递归删除 `build/`。** 不要把它当作唯一的模型库或历史数据存储位置；重新构建前备份手工放入的内容。
+**构建会清理 `build/` 中除 `gguf/` 和 `llamacpp/` 外的内容，包括运行数据和日志。** 重新构建前请备份需要保留的内容。
+
+使用 `.\build.ps1 -Package` 会在构建成功后通过 7-Zip 的最高压缩级别（`-mx=9`）在仓库根目录生成 `EasyWork.7z`，其中仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。脚本优先使用 `PATH` 中的 `7z`，否则尝试默认安装路径 `%ProgramFiles%\7-Zip\7z.exe`。
 
 ## 本地运行根目录
 
-服务端默认以 `EasyWork.exe` 所在目录为运行根目录。开发时可通过 `EASYWORK_ROOT` 指定包含 `html/`、`gguf/`、`llamacpp/` 和 `history/` 的目录，避免依赖可执行文件位置。
+服务端默认以 `EasyWork.exe` 所在目录为运行根目录。开发时可通过 `EASYWORK_ROOT` 指定包含 `html/`、`gguf/`、`llamacpp/`、`history/` 和 `log/` 的目录，避免依赖可执行文件位置。
 
 PowerShell 示例：
 
@@ -98,4 +104,4 @@ npm run build
 
 ## 版本库边界
 
-`build/`、`gguf/`、`llamacpp/`、`history/`、前端依赖和生成词典均不应提交。模型、原始图片、对话和日志可能很大或包含敏感信息，调试时也不要把它们附入补丁。
+`build/`、`gguf/`、`llamacpp/`、`history/`、`log/`、前端依赖和生成词典均不应提交。模型、原始图片、对话和日志可能很大或包含敏感信息，调试时也不要把它们附入补丁。

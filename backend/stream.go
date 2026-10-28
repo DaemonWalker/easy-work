@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -80,7 +81,38 @@ func generationPayload(s GenerationSettings) map[string]any {
 	}
 	return out
 }
-func (m *ModelManager) stream(ctx context.Context, kind string, messages []chatMessage, settings GenerationSettings, onDelta func(string) error) (streamResult, error) {
+func formatMessagesForLog(messages []chatMessage) string {
+	logged := make([]chatMessage, len(messages))
+	for i, message := range messages {
+		logged[i] = message
+		parts, ok := message.Content.([]any)
+		if !ok {
+			continue
+		}
+		sanitized := make([]any, len(parts))
+		for j, part := range parts {
+			sanitized[j] = part
+			values, ok := part.(map[string]any)
+			if ok && values["type"] == "image_url" {
+				sanitized[j] = map[string]any{"type": "image_url", "image_url": map[string]string{"url": "<图片数据已省略>"}}
+			}
+		}
+		logged[i].Content = sanitized
+	}
+	data, _ := json.Marshal(logged)
+	return string(data)
+}
+
+func (m *ModelManager) stream(ctx context.Context, kind string, messages []chatMessage, settings GenerationSettings, onDelta func(string) error) (result streamResult, err error) {
+	var text strings.Builder
+	log.Printf("模型请求: kind=%s messages=%s", kind, formatMessagesForLog(messages))
+	defer func() {
+		if err != nil {
+			log.Printf("模型请求失败: kind=%s error=%v\n已累计输出:\n%s", kind, err, text.String())
+			return
+		}
+		log.Printf("模型请求完成: kind=%s stats=%v\n完整输出:\n%s", kind, result.Stats, result.Text)
+	}()
 	payload := generationPayload(settings)
 	payload["messages"] = messages
 	payload["stream"] = true
@@ -92,7 +124,6 @@ func (m *ModelManager) stream(ctx context.Context, kind string, messages []chatM
 	}
 	defer resp.Body.Close()
 	started := time.Now()
-	var text strings.Builder
 	var usage, timings map[string]any
 	var firstMS int64
 	scanner := bufio.NewScanner(resp.Body)

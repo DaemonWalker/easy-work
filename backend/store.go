@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,17 +64,20 @@ func NewStore(dir string) (*Store, error) {
 	return s, nil
 }
 func (s *Store) read(name string, target any) error {
-	data, err := os.ReadFile(filepath.Join(s.dir, name))
+	path := filepath.Join(s.dir, name)
+	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
+		log.Printf("运行数据读取失败: path=%s error=%v", path, err)
 		return err
 	}
 	if len(data) == 0 {
 		return nil
 	}
 	if err = json.Unmarshal(data, target); err != nil {
+		log.Printf("运行数据解析失败: path=%s error=%v", path, err)
 		return fmt.Errorf("读取 %s: %w", name, err)
 	}
 	return nil
@@ -81,15 +85,18 @@ func (s *Store) read(name string, target any) error {
 func atomicWrite(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
+		log.Printf("运行数据序列化失败: path=%s error=%v", path, err)
 		return err
 	}
 	tmp := path + ".tmp"
 	if err = os.WriteFile(tmp, data, 0644); err != nil {
+		log.Printf("运行数据临时文件写入失败: path=%s error=%v", tmp, err)
 		return err
 	}
 	if err = os.Rename(tmp, path); err != nil {
 		_ = os.Remove(path)
 		if retry := os.Rename(tmp, path); retry != nil {
+			log.Printf("运行数据保存失败: path=%s error=%v", path, retry)
 			return err
 		}
 	}

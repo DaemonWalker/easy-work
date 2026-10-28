@@ -150,7 +150,9 @@ func TestPromptBaseline(t *testing.T) {
 			t.Fatalf("Style 结构错误: %q", result)
 		}
 	}
-	checks := []string{"礼貌铺垫", "动词基本形", "～ことを確認する", "期待值必须以「～こと」结尾", "输出前仅自检一次"}
+	checks := []string{"礼貌铺垫", "动词基本形", "～ことを確認する", "期待值必须以「～こと」结尾", "输出前仅自检一次",
+		"レビュー会議", "同一句的体和句尾必须一致",
+		"全文使用常体，任何句尾都不允许出现です・ます・ません・ください"}
 	all := prompts[TabColleague] + prompts[TabDocument] + prompts[TabTestcase]
 	for _, check := range checks {
 		if !strings.Contains(all, check) {

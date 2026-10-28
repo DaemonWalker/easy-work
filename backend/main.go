@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -39,6 +38,9 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "不自动打开浏览器")
 	flag.Parse()
 	root := executableRoot()
+	appLog := newDailyLogWriter(filepath.Join(root, "log"), "easywork", os.Stdout)
+	defer appLog.Close()
+	log.SetOutput(appLog)
 	store, err := NewStore(filepath.Join(root, "history"))
 	if err != nil {
 		log.Fatalf("初始化运行数据失败: %v", err)
@@ -77,7 +79,7 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	<-signals
-	fmt.Println("\n正在退出并清理模型进程…")
+	log.Printf("正在退出并清理模型进程…")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)

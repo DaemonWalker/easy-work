@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func fail(w http.ResponseWriter, status int, message string) {
+	log.Printf("API 错误: status=%d error=%s", status, message)
 	writeJSON(w, status, map[string]string{"error": message})
 }
 func decodeJSON(r *http.Request, value any) error {

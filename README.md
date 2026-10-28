@@ -33,6 +33,7 @@ EasyWork/
 ├── EasyWork.exe
 ├── html/                         # 页面、脚本和本地 Kuroshiro 词典
 ├── history/                      # 自动创建；保存对话、图片和设置
+├── log/                          # 自动创建；保存后端和 llama-server 每日日志
 ├── gguf/
 │   ├── chat/
 │   │   ├── Hy-MT2-7B-Q4_K_M.gguf
@@ -81,14 +82,20 @@ http://127.0.0.1:18765
 
 ## 数据与备份
 
-所有运行数据均位于 `history/`：
+业务运行数据位于 `history/`：
 
 - `settings.json`：主题、生成参数和各页面偏好。
 - `conversations.json`：普通对话历史。
 - `images.json`、`images/`：图片任务和原始图片。
-- `chat-server.log`、`vl-server.log`：模型进程日志。
 
-备份或迁移时复制整个 `history/`。该目录可能包含私人对话与图片，不应提交到版本库或公开分享。
+日志位于 `log/`，同时输出到控制台：
+
+- `easywork-YYYY-MM-DD.log`：后端关键操作、错误、完整用户输入和模型输出。
+- `chat-server-YYYY-MM-DD.log`、`vl-server-YYYY-MM-DD.log`：对应 llama-server 的 stdout/stderr。
+
+日志按本地日期每日拆分并永久保留，不自动清理。日志无法写入文件时，程序会报告警告并继续使用控制台输出。
+
+备份或迁移时复制整个 `history/`；需要保留日志时同时复制 `log/`。这些目录可能包含私人对话、图片和模型输出，不应提交到版本库或公开分享。
 
 ## 从源码构建
 
@@ -104,7 +111,15 @@ http://127.0.0.1:18765
 .\build\EasyWork.exe
 ```
 
-> **注意：构建脚本会删除并重建整个 `build/` 目录。** 如果你已把模型、llama.cpp 或运行数据放入其中，请先备份，避免被清理。
+构建会保留 `build/gguf/` 和 `build/llamacpp/`，但会清理 `build/` 中的其他内容，包括运行数据和日志，重新构建前请备份需要保留的内容。
+
+如需同时生成发布压缩包，请安装 7-Zip 并执行：
+
+```powershell
+.\build.ps1 -Package
+```
+
+构建成功后会在仓库根目录生成 `EasyWork.7z`，使用最高压缩级别，仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。
 
 更多开发命令见 [开发指南](document/development.md)。
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -24,12 +25,16 @@ type runningModel struct {
 	kind, id string
 	done     chan struct{}
 }
+type hardwareSampler interface {
+	Sample() Hardware
+}
+
 type ModelManager struct {
 	mu       sync.RWMutex
 	opMu     sync.Mutex
 	root     string
 	store    *Store
-	hardware *hardwareMonitor
+	hardware hardwareSampler
 	models   map[string]ModelInfo
 	status   map[string]*ModelStatus
 	running  map[string]*runningModel
@@ -37,7 +42,7 @@ type ModelManager struct {
 	closed   bool
 }
 
-func NewModelManager(root string, store *Store, hardware *hardwareMonitor, models []ModelInfo) *ModelManager {
+func NewModelManager(root string, store *Store, hardware hardwareSampler, models []ModelInfo) *ModelManager {
 	m := &ModelManager{root: root, store: store, hardware: hardware, models: map[string]ModelInfo{}, status: map[string]*ModelStatus{"chat": {Kind: "chat", Status: "unloaded"}, "vl": {Kind: "vl", Status: "unloaded"}}, running: map[string]*runningModel{}, client: &http.Client{Timeout: 15 * time.Second}}
 	for _, v := range models {
 		if v.Kind != "vl" {
@@ -105,7 +110,11 @@ func fileSize(path string) int64 {
 func (m *ModelManager) Ensure(ctx context.Context, kind, modelID string) error {
 	m.opMu.Lock()
 	defer m.opMu.Unlock()
-	return m.ensureLocked(ctx, kind, modelID, false)
+	err := m.ensureLocked(ctx, kind, modelID, false)
+	if err != nil {
+		log.Printf("模型检查或加载失败: kind=%s model=%s error=%v", kind, modelID, err)
+	}
+	return err
 }
 func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, recovery bool) error {
 	if kind != "chat" && kind != "vl" {
@@ -131,12 +140,7 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 	if kind == "vl" {
 		reserve = 2 * gib
 	}
-	overhead := uint64(768 * 1024 * 1024)
-	if kind == "vl" {
-		overhead = 512 * 1024 * 1024
-	}
-	needed := uint64(info.Size) + overhead
-	if available < needed+reserve {
+	if available < reserve {
 		other := "vl"
 		if kind == "vl" {
 			other = "chat"
@@ -145,10 +149,6 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 			if err = m.unloadLocked(other); err != nil {
 				return fmt.Errorf("释放另一模型内存失败: %w", err)
 			}
-			available = m.hardware.Sample().MemoryAvailable
-		}
-		if available < needed+reserve {
-			return fmt.Errorf("可用内存不足：加载 %s 后需至少保留 %d GB，请先释放系统内存", modelID, reserve/gib)
 		}
 	}
 	exe := filepath.Join(m.root, "llamacpp", "llama-server.exe")
@@ -172,37 +172,31 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 		args = append(args, "--mmproj", mmproj)
 	}
 	m.setStatus(kind, "loading", modelID, nil)
+	log.Printf("模型加载开始: kind=%s model=%s recovery=%v", kind, modelID, recovery)
 	started := time.Now()
-	logPath := filepath.Join(m.store.dir, kind+"-server.log")
-	logFile, _ := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logWriter := newDailyLogWriter(filepath.Join(m.root, "log"), kind+"-server", os.Stdout)
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = m.root
 	configureProcess(cmd)
-	if logFile != nil {
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
-	}
+	cmd.Stdout = logWriter
+	cmd.Stderr = logWriter
 	run := &runningModel{cmd: cmd, kind: kind, id: modelID, done: make(chan struct{})}
 	if err = cmd.Start(); err != nil {
-		if logFile != nil {
-			logFile.Close()
-		}
+		_ = logWriter.Close()
 		m.setStatus(kind, "failed", modelID, err)
 		return err
 	}
 	if err = assignProcess(cmd); err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		if logFile != nil {
-			logFile.Close()
-		}
+		_ = logWriter.Close()
 		m.setStatus(kind, "failed", modelID, err)
 		return fmt.Errorf("加入进程清理组失败: %w", err)
 	}
 	m.mu.Lock()
 	m.running[kind] = run
 	m.mu.Unlock()
-	go m.watch(run, logFile)
+	go m.watch(run, logWriter)
 	if err = m.waitHealthy(ctx, kind, cmd); err != nil {
 		m.mu.Lock()
 		run.expected = true
@@ -211,29 +205,6 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 		<-run.done
 		m.setStatus(kind, "failed", modelID, err)
 		return fmt.Errorf("模型加载失败: %w", err)
-	}
-	mem := m.hardware.Sample().MemoryAvailable
-	if mem < reserve {
-		other := "vl"
-		if kind == "vl" {
-			other = "chat"
-		}
-		if m.loadedID(other) != "" {
-			if unloadErr := m.unloadLocked(other); unloadErr != nil {
-				return unloadErr
-			}
-			mem = m.hardware.Sample().MemoryAvailable
-		}
-	}
-	if mem < reserve {
-		m.mu.Lock()
-		run.expected = true
-		m.mu.Unlock()
-		_ = cmd.Process.Kill()
-		<-run.done
-		err = fmt.Errorf("加载后可用内存 %.1f GB，低于 %d GB 安全预留，已卸载", float64(mem)/float64(gib), reserve/gib)
-		m.setStatus(kind, "failed", modelID, err)
-		return err
 	}
 	props, _ := m.fetchProps(ctx, kind)
 	if meta, metaErr := m.fetchModelMeta(ctx, kind); metaErr == nil {
@@ -255,12 +226,14 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 	s := m.status[kind]
 	s.Status = "loaded"
 	s.Error = ""
-	s.LoadMS = time.Since(started).Milliseconds()
+	loadMS := time.Since(started).Milliseconds()
+	s.LoadMS = loadMS
 	s.Details = props
 	if !recovery {
 		s.RestartCount = 0
 	}
 	m.mu.Unlock()
+	log.Printf("模型加载完成: kind=%s model=%s load_ms=%d", kind, modelID, loadMS)
 	return nil
 }
 func (m *ModelManager) health(ctx context.Context, kind string) error {
@@ -288,7 +261,7 @@ func (m *ModelManager) waitHealthy(ctx context.Context, kind string, cmd *exec.C
 			return ctx.Err()
 		}
 		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-			return errors.New("llama-server 已退出，请查看 history 中的服务日志")
+			return errors.New("llama-server 已退出，请查看 log 中的服务日志")
 		}
 		if time.Now().After(deadline) {
 			return errors.New("等待模型就绪超时")
@@ -377,6 +350,7 @@ func (m *ModelManager) unloadLocked(kind string) error {
 	s.Status = "unloading"
 	s.Error = ""
 	m.mu.Unlock()
+	log.Printf("模型卸载开始: kind=%s model=%s", kind, run.id)
 	err := run.cmd.Process.Kill()
 	select {
 	case <-run.done:
@@ -387,12 +361,17 @@ func (m *ModelManager) unloadLocked(kind string) error {
 	delete(m.running, kind)
 	m.status[kind] = &ModelStatus{Kind: kind, Status: "unloaded", Model: run.id}
 	m.mu.Unlock()
+	if err != nil {
+		log.Printf("模型卸载失败: kind=%s model=%s error=%v", kind, run.id, err)
+	} else {
+		log.Printf("模型卸载完成: kind=%s model=%s", kind, run.id)
+	}
 	return err
 }
-func (m *ModelManager) watch(run *runningModel, logFile *os.File) {
+func (m *ModelManager) watch(run *runningModel, logWriter *dailyLogWriter) {
 	err := run.cmd.Wait()
-	if logFile != nil {
-		logFile.Close()
+	if closeErr := logWriter.Close(); closeErr != nil {
+		log.Printf("关闭 llama-server 日志失败: kind=%s error=%v", run.kind, closeErr)
 	}
 	close(run.done)
 	m.mu.Lock()
@@ -408,6 +387,7 @@ func (m *ModelManager) watch(run *runningModel, logFile *os.File) {
 	if expected {
 		return
 	}
+	log.Printf("llama-server 意外退出: kind=%s model=%s error=%v", run.kind, run.id, err)
 	m.mu.RLock()
 	closed := m.closed
 	m.mu.RUnlock()
@@ -429,14 +409,18 @@ func (m *ModelManager) recover(kind, modelID string) {
 		m.status[kind].RestartCount = attempt
 		m.status[kind].Error = fmt.Sprintf("崩溃恢复，第 %d/3 次", attempt)
 		m.mu.Unlock()
+		log.Printf("模型崩溃恢复开始: kind=%s model=%s attempt=%d/3", kind, modelID, attempt)
 		m.opMu.Lock()
 		err := m.ensureLocked(context.Background(), kind, modelID, true)
 		m.opMu.Unlock()
 		if err == nil {
+			log.Printf("模型崩溃恢复成功: kind=%s model=%s attempt=%d/3", kind, modelID, attempt)
 			return
 		}
+		log.Printf("模型崩溃恢复失败: kind=%s model=%s attempt=%d/3 error=%v", kind, modelID, attempt, err)
 		time.Sleep(time.Duration(attempt) * time.Second)
 	}
+	log.Printf("模型崩溃恢复终止: kind=%s model=%s 已连续失败三次", kind, modelID)
 	m.setStatus(kind, "failed", modelID, errors.New("连续三次重启或模型恢复失败，已停止自动重试"))
 }
 func (m *ModelManager) Reload(kinds ...string) error {
