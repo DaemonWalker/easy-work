@@ -15,6 +15,12 @@ frontend/public/dict/
 /history/
 /log/
 
+# Local analysis material: ChatGPT export, prompt analysis reports, eval
+# scripts, prompt snapshots and test/eval results (personal data, local only)
+/chatgpt/
+/chatgpt-analysis/
+backend/dump_prompts_test.go
+
 # Go build and test artifacts
 *.exe
 *.exe~
@@ -25,12 +31,21 @@ frontend/public/dict/
 *.out
 coverage.*
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
 # Logs and temporary files
 *.log
 *.tmp
 *.temp
 *.bak
 *.swp
+*.orig
+*.rej
 *~
 
 # Local environment files
