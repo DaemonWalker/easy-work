@@ -20,12 +20,50 @@ type Store struct {
 	images        []ImageTask
 }
 
+// 默认生成参数取 Hy-MT2 官方 README 对 1.8B/7B 的推荐值。
+// max_tokens 仍用 2048：官方推荐的 4096 需要远大于本应用默认 4096 的上下文。
+const defaultMaxTokens = 2048
+
+func defaultGeneration() GenerationSettings {
+	temperature := 0.7
+	topP := 0.6
+	topK := 20
+	repeatPenalty := 1.05
+	return GenerationSettings{
+		Temperature:   &temperature,
+		TopP:          &topP,
+		TopK:          &topK,
+		RepeatPenalty: &repeatPenalty,
+		MaxTokens:     defaultMaxTokens,
+	}
+}
+
+// normalizeGeneration 给缺失或为 null 的项补默认值，让旧 settings.json 也切到新默认。
+func normalizeGeneration(g *GenerationSettings) {
+	fallback := defaultGeneration()
+	if g.Temperature == nil {
+		g.Temperature = fallback.Temperature
+	}
+	if g.TopP == nil {
+		g.TopP = fallback.TopP
+	}
+	if g.TopK == nil {
+		g.TopK = fallback.TopK
+	}
+	if g.RepeatPenalty == nil {
+		g.RepeatPenalty = fallback.RepeatPenalty
+	}
+	if g.MaxTokens < 1 {
+		g.MaxTokens = fallback.MaxTokens
+	}
+}
+
 func defaultSettings() Settings {
 	tabs := map[string]string{}
 	for _, tab := range modelTabs {
 		tabs[tab] = ""
 	}
-	return Settings{Theme: "cloud", Threads: runtime.NumCPU(), Context: 4096, Generation: GenerationSettings{MaxTokens: 2048}, TabModels: tabs}
+	return Settings{Theme: "cloud", Threads: runtime.NumCPU(), Context: 4096, Generation: defaultGeneration(), TabModels: tabs}
 }
 
 func NewStore(dir string) (*Store, error) {
@@ -58,9 +96,7 @@ func NewStore(dir string) (*Store, error) {
 	if s.settings.Context < 1 {
 		s.settings.Context = 4096
 	}
-	if s.settings.Generation.MaxTokens < 1 {
-		s.settings.Generation.MaxTokens = 2048
-	}
+	normalizeGeneration(&s.settings.Generation)
 	return s, nil
 }
 func (s *Store) read(name string, target any) error {

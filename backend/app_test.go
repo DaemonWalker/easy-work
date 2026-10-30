@@ -150,13 +150,19 @@ func TestPromptBaseline(t *testing.T) {
 			t.Fatalf("Style 结构错误: %q", result)
 		}
 	}
-	checks := []string{"礼貌铺垫", "动词基本形", "～ことを確認する", "期待值必须以「～こと」结尾", "输出前仅自检一次",
-		"レビュー会議", "同一句的体和句尾必须一致",
-		"全文使用常体，任何句尾都不允许出现です・ます・ません・ください"}
+	checks := []string{"统一用です・ます体", "敬语请求句式", "不得在结尾补请求对方确认或行动的句子",
+		"动词基本形收尾", "条件的嵌套层次和结合顺序不变", "常体（だ・である体）",
+		"～ことを確認する", "～されること", "同一概念在全文用同一说法", "「～」是占位符号"}
 	all := prompts[TabColleague] + prompts[TabDocument] + prompts[TabTestcase]
 	for _, check := range checks {
 		if !strings.Contains(all, check) {
 			t.Errorf("Prompt 缺少 %q", check)
+		}
+	}
+	// 规则必须是通用句式，不能退回「中文词→日文词」的对照表。
+	for _, banned := range []string{"レビュー会議", "评审会", "Xsan", "運賃", "PNR、SSR"} {
+		if strings.Contains(all, banned) {
+			t.Errorf("Prompt 仍包含词汇对照式内容 %q", banned)
 		}
 	}
 	if got := userPrompt(TabCustom, "完整 Prompt"); got != "完整 Prompt" {
@@ -166,6 +172,48 @@ func TestPromptBaseline(t *testing.T) {
 		t.Fatal("日译中未保留原 Personalization 结构")
 	}
 }
+func TestGenerationDefaults(t *testing.T) {
+	g := defaultSettings().Generation
+	if g.Temperature == nil || *g.Temperature != 0.7 ||
+		g.TopP == nil || *g.TopP != 0.6 ||
+		g.TopK == nil || *g.TopK != 20 ||
+		g.RepeatPenalty == nil || *g.RepeatPenalty != 1.05 ||
+		g.MaxTokens != 2048 {
+		t.Fatalf("默认生成参数不是 Hy-MT2 官方推荐值: %+v", g)
+	}
+	payload := generationPayload(g)
+	if payload["temperature"] != 0.7 || payload["top_p"] != 0.6 ||
+		payload["top_k"] != 20 || payload["repeat_penalty"] != 1.05 {
+		t.Fatalf("请求载荷未带上默认采样参数: %+v", payload)
+	}
+	if _, ok := payload["min_p"]; ok {
+		t.Fatalf("min_p 未设置时不应出现在载荷里: %+v", payload)
+	}
+}
+
+func TestGenerationDefaultsBackfill(t *testing.T) {
+	dir := t.TempDir()
+	legacy := `{"theme":"cloud","threads":4,"context":4096,"generation":{"temperature":null,"top_p":null,"top_k":null,"min_p":null,"repeat_penalty":null,"max_tokens":0}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := store.Settings().Generation
+	if g.Temperature == nil || *g.Temperature != 0.7 ||
+		g.TopP == nil || *g.TopP != 0.6 ||
+		g.TopK == nil || *g.TopK != 20 ||
+		g.RepeatPenalty == nil || *g.RepeatPenalty != 1.05 ||
+		g.MaxTokens != 2048 {
+		t.Fatalf("旧 settings.json 未补齐默认值: %+v", g)
+	}
+	if g.MinP != nil {
+		t.Fatalf("min_p 不应被补默认值: %v", *g.MinP)
+	}
+}
+
 func TestStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(dir)
