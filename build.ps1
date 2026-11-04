@@ -22,19 +22,20 @@ Write-Host '[3/4] Building native Windows x64 executable'
 $env:GOOS = 'windows'
 $env:GOARCH = 'amd64'
 $env:CGO_ENABLED = '0'
-$BuildPath = Join-Path $Root 'build'
+$LocalPath = Join-Path $Root 'local'
+$BuildPath = Join-Path $LocalPath 'build'
 if (Test-Path $BuildPath) {
     Get-ChildItem -Force $BuildPath |
         Where-Object { $_.Name -notin @('gguf', 'llamacpp') } |
         Remove-Item -Recurse -Force
 }
-New-Item -ItemType Directory -Path (Join-Path $Root 'build/html'), (Join-Path $Root 'build/history'), (Join-Path $Root 'build/log') | Out-Null
-go -C backend build -trimpath -ldflags='-s -w' -o (Join-Path $Root 'build/EasyWork.exe') .
+New-Item -ItemType Directory -Path (Join-Path $BuildPath 'html'), (Join-Path $BuildPath 'history'), (Join-Path $BuildPath 'log') | Out-Null
+go -C backend build -trimpath -ldflags='-s -w' -o (Join-Path $BuildPath 'EasyWork.exe') .
 if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
 
 Write-Host '[4/4] Copying static pages and local dictionaries'
-Copy-Item -Recurse -Force (Join-Path $Root 'frontend/dist/*') (Join-Path $Root 'build/html')
-Write-Host "Build complete: $Root\build\EasyWork.exe"
+Copy-Item -Recurse -Force (Join-Path $Root 'frontend/dist/*') (Join-Path $BuildPath 'html')
+Write-Host "Build complete: $BuildPath\EasyWork.exe"
 
 if ($Package) {
     Write-Host '[5/5] Creating EasyWork.7z with maximum compression'
@@ -46,7 +47,7 @@ if ($Package) {
     }
     if (-not (Test-Path $SevenZip)) { throw '7-Zip was not found. Install it or add 7z.exe to PATH.' }
 
-    $ArchivePath = Join-Path $Root 'EasyWork.7z'
+    $ArchivePath = Join-Path $LocalPath 'EasyWork.7z'
     if (Test-Path $ArchivePath) { Remove-Item -Force $ArchivePath }
     Push-Location $BuildPath
     try {

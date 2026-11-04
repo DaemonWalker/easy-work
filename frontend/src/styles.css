@@ -107,6 +107,8 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
 .empty-conversation span { color: var(--muted); font-size: 12px; }
 .message { width: 100%; margin: 0 0 30px; }
 .message.user { width: fit-content; max-width: 78%; margin-left: auto; }
+.message.user.editing { width: 100%; max-width: 100%; }
+.edit-message { width: 100%; }
 .message-meta { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; font-weight: 600; margin-bottom: 7px; }
 .message.user .message-meta { justify-content: flex-end; min-height: 26px; margin: 4px 1px 0; }
 .message-content { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.75; }

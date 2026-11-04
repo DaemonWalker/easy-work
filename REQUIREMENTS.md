@@ -59,15 +59,18 @@
 <开发目录>/
 ├── backend/    # 新服务端源码
 ├── frontend/   # 页面源码
-└── build/      # 生成的免安装运行目录
+└── local/
+    └── build/  # 生成的免安装运行目录
 ```
+
+根目录的构建产物、模型、运行数据和本地分析资料统一放在已忽略的 `local/` 中。
 
 ### 3.2 生成与运行目录
 
-`build` 中生成的目录结构如下：
+`local/build` 中生成的目录结构如下（发布版的运行根目录仍保持相同结构）：
 
 ```text
-build/
+local/build/
 ├── <服务端程序>.exe
 ├── html/
 │   ├── 页面及前端静态资源
@@ -282,7 +285,7 @@ build/
 
 Hy-MT2 的三个中译日场景使用程序内置 Prompt，按「通用保真段 + 场景段」拼装；结构保持「通用段 + 三套独立场景段」，不合并成一段长 Personalization。
 
-2026-10-29 起为通用句式版：Prompt 中不写具体词表、人名/会议映射或整句答案，只用文体、句尾功能、语气和描述方式约束。完整文本见 `chatgpt-analysis/prompt-hy-mt2.md`，代码以 `backend/prompts.go` 为准；参考项目 `hy-mt2-7b-q4`/`hy-mt2-7b-q6` 的 Prompt 仍是风格与规则来源。
+2026-10-29 起为通用句式版：Prompt 中不写具体词表、人名/会议映射或整句答案，只用文体、句尾功能、语气和描述方式约束。完整文本见 `local/chatgpt-analysis/prompt-hy-mt2.md`，代码以 `backend/prompts.go` 为准；参考项目 `hy-mt2-7b-q4`/`hy-mt2-7b-q6` 的 Prompt 仍是风格与规则来源。
 
 参考项目对每条待处理用户消息采用以下结构，后续开发应保持原文与任务标记的清晰区分：
 
@@ -306,7 +309,7 @@ Index-Translate 不复用 Hy-MT2 Style Prompt。三个中译日 Tab 使用 `back
 - Test Case：使用简洁、明确的常体测试规格书风格；严格区分操作步骤和预期结果，操作原则上用动词基本形、预期结果原则上用「～こと」；不增加原文没有的操作、确认事项或测试数据。
 - 日译中：自然简体中文；英文、代码、数值原样；按段全译；只输出译文。
 
-Hy-MT2 的 `prompt-spec.md` 规则 ID 仍是改其 Prompt 的入口；本地 7B 的评测方式与通过率见 `chatgpt-analysis/prompt-hy-mt2.md` 第 7、8 节。
+Hy-MT2 的 `prompt-spec.md` 规则 ID 仍是改其 Prompt 的入口；本地 7B 的评测方式与通过率见 `local/chatgpt-analysis/prompt-hy-mt2.md` 第 7、8 节。
 
 ## 8. 自由 Chat
 

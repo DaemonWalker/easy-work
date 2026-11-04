@@ -18,14 +18,14 @@
 # 后端单元与集成测试（使用 mock llama-server，不需要真实模型）
 go -C backend test ./...
 
-# 标准构建：测试、前端构建、后端编译、组装 build/
+# 标准构建：测试、前端构建、后端编译、组装 local/build/
 .\build.ps1
 
 # 构建后以 7-Zip 最高压缩级别生成 EasyWork.7z
 .\build.ps1 -Package
 
 # 启动构建结果
-.\build\EasyWork.exe -no-browser
+.\local\build\EasyWork.exe -no-browser
 ```
 
 前端单独检查或构建：
@@ -43,18 +43,18 @@ npm run build
 `build.ps1` 会生成：
 
 ```text
-build/
+local/build/
 ├── EasyWork.exe
 ├── html/
 ├── history/
 └── log/
 ```
 
-脚本会保留 `build/gguf/` 和 `build/llamacpp/`，但不会将它们放入发布压缩包，也不会把新模型从开发目录复制到 `build/gguf/chat/`。首次运行前需手动复制这两组资源；Index 端到端验证前，确认两个 `Index-Translate-9B.*.gguf` 已放入 `build/gguf/chat/`；Index 图像识别还需将 `Index-Translate-9B.mmproj-Q8_0.gguf` 放入 `build/gguf/vl/`。
+脚本会保留 `local/build/gguf/` 和 `local/build/llamacpp/`，但不会将它们放入发布压缩包，也不会把新模型从 `local/gguf/` 复制到 `local/build/gguf/chat/`。首次运行前需手动复制这两组资源；Index 端到端验证前，确认两个 `Index-Translate-9B.*.gguf` 已放入 `local/build/gguf/chat/`；Index 图像识别还需将 `Index-Translate-9B.mmproj-Q8_0.gguf` 放入 `local/build/gguf/vl/`。
 
-**构建会清理 `build/` 中除 `gguf/` 和 `llamacpp/` 外的内容，包括运行数据和日志。** 重新构建前请备份需要保留的内容。
+**构建会清理 `local/build/` 中除 `gguf/` 和 `llamacpp/` 外的内容，包括运行数据和日志。** 重新构建前请备份需要保留的内容。
 
-使用 `.\build.ps1 -Package` 会在构建成功后通过 7-Zip 的最高压缩级别（`-mx=9`）在仓库根目录生成 `EasyWork.7z`，其中仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。脚本优先使用 `PATH` 中的 `7z`，否则尝试默认安装路径 `%ProgramFiles%\7-Zip\7z.exe`。
+使用 `.\build.ps1 -Package` 会在构建成功后通过 7-Zip 的最高压缩级别（`-mx=9`）生成 `local/EasyWork.7z`，其中仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。脚本优先使用 `PATH` 中的 `7z`，否则尝试默认安装路径 `%ProgramFiles%\7-Zip\7z.exe`。
 
 ## 本地运行根目录
 
@@ -63,12 +63,12 @@ build/
 PowerShell 示例：
 
 ```powershell
-$env:EASYWORK_ROOT = (Resolve-Path .\build)
+$env:EASYWORK_ROOT = (Resolve-Path .\local\build)
 Set-Location backend
 go run . -no-browser
 ```
 
-该方式仍要求 `build/html/` 已存在，因此先完成一次标准构建。
+该方式仍要求 `local/build/html/` 已存在，因此先完成一次标准构建。
 
 ## 修改代码时
 
@@ -90,7 +90,7 @@ npm ci
 npm run build
 ```
 
-完整构建改动应直接运行 `.\build.ps1`。涉及真实交互时，还应在 Windows 上启动 `build/EasyWork.exe`，验证对应页面、API、模型加载与停止流程。
+完整构建改动应直接运行 `.\build.ps1`。涉及真实交互时，还应在 Windows 上启动 `local/build/EasyWork.exe`，验证对应页面、API、模型加载与停止流程。
 
 后端测试通过 `httptest` 和 mock llama-server 覆盖核心行为，不要求下载模型。但 mock 测试不能替代以下真实环境验证：
 
@@ -104,7 +104,7 @@ npm run build
 
 ### Index 本地评测
 
-当前 instTrans「通用硬约束 + 场景约束」Prompt 已固定在 tracked 文件 `backend/prompts_index.go`，产品运行时不读取分析目录。16/12/47 条评测 CSV 含工作内容，只保留在已忽略的 `chatgpt-analysis/`，不得复制到 `backend/testdata/` 或提交到 Git。`backend/index_eval_test.go` 直接读取该本地目录；常规 Go 测试在数据存在时校验用例和 Prompt 包装，不存在时跳过。
+当前 instTrans「通用硬约束 + 场景约束」Prompt 已固定在 tracked 文件 `backend/prompts_index.go`，产品运行时不读取分析目录。16/12/47 条评测 CSV 含工作内容，只保留在已忽略的 `local/chatgpt-analysis/`，不得复制到 `backend/testdata/` 或提交到 Git。`backend/index_eval_test.go` 直接读取该本地目录；常规 Go 测试在数据存在时校验用例和 Prompt 包装，不存在时跳过。
 
 需要真实模型评测时，先在一个终端启动已加载 Index Q4 或 Q5 的 llama-server，再在仓库根目录执行：
 
@@ -117,4 +117,4 @@ go -C backend test -run '^TestIndexTranslateEval$' -v
 
 ## 版本库边界
 
-`build/`、`gguf/`、`llamacpp/`、`history/`、`log/`、`chatgpt-analysis/`、前端依赖和生成词典均不应提交。模型、原始图片、对话、日志和评测用例可能很大或包含敏感信息，调试时也不要把它们附入补丁。
+`local/`、前端依赖和生成词典均不应提交。模型、原始图片、对话、日志和评测用例可能很大或包含敏感信息，调试时也不要把它们附入补丁。

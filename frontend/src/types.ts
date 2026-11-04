@@ -12,4 +12,4 @@ export interface GlobalTask{busy:boolean;task_id:string;kind:string;stage:string
 export interface Hardware{cpu:number;memory_used:number;memory_total:number;memory_available:number;refresh_seconds:number}
 export interface State{settings:Settings;models:ModelInfo[];status:ModelStatus[];task:GlobalTask;hardware:Hardware}
 export interface ImageTask{id:string;filename:string;mime:string;width:number;height:number;ocr:string;translation:string;ocr_stats?:Stats;translation_stats?:Stats;created_at:string;updated_at:string}
-export interface Run{kind:'chat'|'image';tab?:ModelTab;conversationId?:string;imageId?:string;draft:string;translationDraft:string;status:string;error:string}
+export interface Run{kind:'chat'|'image';tab?:ModelTab;conversationId?:string;conversation?:Conversation;imageId?:string;draft:string;translationDraft:string;status:string;error:string}

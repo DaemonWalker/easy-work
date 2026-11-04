@@ -110,13 +110,13 @@ http://127.0.0.1:18765
 .\build.ps1
 ```
 
-脚本会依次运行 Go 测试、安装前端锁定依赖、构建前端，并生成免安装目录 `build/`。脚本不会自动复制新模型；随后按“准备运行目录”的结构，将 `gguf/` 和 `llamacpp/` 复制到 `build/`（Index 验证前确认两个 Index 文件位于 `build/gguf/chat/`），再运行：
+脚本会依次运行 Go 测试、安装前端锁定依赖、构建前端，并生成免安装目录 `local/build/`。脚本不会自动复制新模型；随后按“准备运行目录”的结构，将 `local/gguf/` 和 `local/llamacpp/` 复制到 `local/build/`（Index 验证前确认两个 Index 文件位于 `local/build/gguf/chat/`），再运行：
 
 ```powershell
-.\build\EasyWork.exe
+.\local\build\EasyWork.exe
 ```
 
-构建会保留 `build/gguf/` 和 `build/llamacpp/`，但会清理 `build/` 中的其他内容，包括运行数据和日志，重新构建前请备份需要保留的内容。
+构建会保留 `local/build/gguf/` 和 `local/build/llamacpp/`，但会清理 `local/build/` 中的其他内容，包括运行数据和日志，重新构建前请备份需要保留的内容。
 
 如需同时生成发布压缩包，请安装 7-Zip 并执行：
 
@@ -124,17 +124,17 @@ http://127.0.0.1:18765
 .\build.ps1 -Package
 ```
 
-构建成功后会在仓库根目录生成 `EasyWork.7z`，使用最高压缩级别，仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。
+构建成功后会在 `local/EasyWork.7z` 生成发布压缩包，使用最高压缩级别，仅包含 `EasyWork.exe`、`html/` 和空的 `history/`。
 
 更多开发命令见 [开发指南](document/development.md)。
 
 ## 项目结构
 
 ```text
-backend/       Go HTTP 服务、模型进程管理、持久化与测试
-frontend/      React + TypeScript + Vite 页面
-build/         构建生成的免安装运行目录（不纳入版本库）
-document/      面向开发与维护的详细文档
+backend/        Go HTTP 服务、模型进程管理、持久化与测试
+frontend/       React + TypeScript + Vite 页面
+local/          本地构建产物、运行资源和分析资料（不纳入版本库）
+document/       面向开发与维护的详细文档
 REQUIREMENTS.md 完整需求基线
 ```
 

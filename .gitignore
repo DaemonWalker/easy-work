@@ -7,18 +7,9 @@ frontend/public/dict/
 *.tsbuildinfo
 .vite/
 
-# Release output and local runtime resources
-/build/
-/EasyWork.7z
-/gguf/
-/llamacpp/
-/history/
-/log/
-
-# Local analysis material: ChatGPT export, prompt analysis reports, eval
-# scripts, prompt snapshots and test/eval results (personal data, local only)
-/chatgpt/
-/chatgpt-analysis/
+# Local build outputs, runtime resources and analysis material
+# (models, personal data, prompt snapshots and test/eval results)
+/local/
 backend/dump_prompts_test.go
 
 # Go build and test artifacts
