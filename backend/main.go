@@ -49,9 +49,20 @@ func main() {
 	if err != nil {
 		log.Printf("扫描模型失败: %v", err)
 	}
-	vlPath := filepath.Join(root, "gguf", "vl", "PaddleOCR-VL-1.6-GGUF.gguf")
+	vlPath := filepath.Join(root, "gguf", "vl", paddleOCRModel)
 	if vl, vlErr := readGGUF(vlPath); vlErr == nil {
 		models = append(models, vl)
+	}
+	mmprojPath := filepath.Join(root, "gguf", "vl", indexMMProj)
+	if _, statErr := os.Stat(mmprojPath); statErr == nil {
+		for _, chat := range models {
+			if chat.Kind == "chat" && isIndexModel(chat.ID) {
+				vl := chat
+				vl.Kind = "vl"
+				vl.Size += fileSize(mmprojPath)
+				models = append(models, vl)
+			}
+		}
 	}
 	hardware := newHardwareMonitor()
 	manager := NewModelManager(root, store, hardware, models)

@@ -35,8 +35,42 @@ func validTab(tab string) bool {
 	}
 	return false
 }
-func isTranslationModel(name string) bool {
+
+const (
+	paddleOCRModel = "PaddleOCR-VL-1.6-GGUF.gguf"
+	paddleMMProj   = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf"
+	indexMMProj    = "Index-Translate-9B.mmproj-Q8_0.gguf"
+)
+
+func isHyMT2Model(name string) bool {
 	return name == "Hy-MT2-7B-Q4_K_M.gguf" || name == "HY-MT2-7B-Q6_K.gguf"
+}
+func isIndexModel(name string) bool {
+	return name == "Index-Translate-9B.Q4_K_M.gguf" || name == "Index-Translate-9B.Q5_K_M.gguf"
+}
+func isZhJaModel(name string) bool {
+	return isHyMT2Model(name) || isIndexModel(name)
+}
+func isJaZhModel(name string) bool {
+	return isHyMT2Model(name) || isIndexModel(name)
+}
+func isImageOCRModel(name string) bool {
+	return name == paddleOCRModel || isIndexModel(name)
+}
+func isImageTranslationModel(name string) bool {
+	return isJaZhModel(name)
+}
+func allowsModel(tab, model string) bool {
+	switch tab {
+	case TabColleague, TabDocument, TabTestcase:
+		return isZhJaModel(model)
+	case TabJa2zh:
+		return isJaZhModel(model)
+	case TabCustom:
+		return true
+	default:
+		return false
+	}
 }
 func trimmedTitle(s string) string {
 	s = strings.Join(strings.Fields(s), " ")

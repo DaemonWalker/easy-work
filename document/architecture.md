@@ -76,7 +76,9 @@ Go 服务端（EasyWork.exe）
 ### 离线与安全
 
 - 页面、字体、词典和运行依赖均使用本地资源，不增加 CDN 或在线 API。
-- 固定翻译场景只允许需求指定的两个 Chat 模型；自由 Chat 可使用 `gguf/chat/` 中的其他 Chat 模型。
+- 模型能力按场景判断：三个中译日 Tab、日译中 Tab 和图像翻译允许 Hy-MT2 与 Index-Translate Q4/Q5；图像识别可选 PaddleOCR-VL 或 Index-Translate Q4/Q5；自由 Chat 可使用 `gguf/chat/` 中的其他 Chat 模型。Index VL 复用 `gguf/chat/` 中的主模型，并配对 `gguf/vl/Index-Translate-9B.mmproj-Q8_0.gguf`。
+- Prompt 按「模型 + Tab」路由：Hy-MT2 保持 Style/Personalization，Index 中译日使用 `backend/prompts_index.go` 内置的 instTrans 结构，按 `【源文】`、`【约束要求】` 和编号硬约束／软约束组织，不使用 few-shot 样例；Index 日译中使用独立日译中 Prompt，不复用中译日 Prompt；不读取本地分析目录。
+- 对话在首条消息后固定模型；历史用户消息统一按对话模型包装。Index 请求固定贪心解码，并在生成和 `/apply-template` 中传 `chat_template_kwargs={"enable_thinking":false}`。
 - 默认仅监听本机。`-lan` 是无认证模式，不要把它描述为安全的多用户系统。
 - 不开放自定义模型路径、llama-server 路径或端口等需求明确排除的配置。
 

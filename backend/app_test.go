@@ -22,7 +22,15 @@ import (
 )
 
 func testModels() []ModelInfo {
-	return []ModelInfo{{ID: "Hy-MT2-7B-Q4_K_M.gguf", Kind: "chat", Name: "Hy-MT2-7B-Q4_K_M.gguf", Path: "q4.gguf", MaxContext: 8192}, {ID: "HY-MT2-7B-Q6_K.gguf", Kind: "chat", Name: "HY-MT2-7B-Q6_K.gguf", Path: "q6.gguf", MaxContext: 8192}, {ID: "PaddleOCR-VL-1.6-GGUF.gguf", Kind: "vl", Name: "PaddleOCR-VL-1.6-GGUF.gguf", MaxContext: 131072}}
+	return []ModelInfo{
+		{ID: "Hy-MT2-7B-Q4_K_M.gguf", Kind: "chat", Name: "Hy-MT2-7B-Q4_K_M.gguf", Path: "q4.gguf", MaxContext: 8192},
+		{ID: "HY-MT2-7B-Q6_K.gguf", Kind: "chat", Name: "HY-MT2-7B-Q6_K.gguf", Path: "q6.gguf", MaxContext: 8192},
+		{ID: "Index-Translate-9B.Q4_K_M.gguf", Kind: "chat", Name: "Index-Translate-9B.Q4_K_M.gguf", Path: "index-q4.gguf", MaxContext: 262144},
+		{ID: "Index-Translate-9B.Q5_K_M.gguf", Kind: "chat", Name: "Index-Translate-9B.Q5_K_M.gguf", Path: "index-q5.gguf", MaxContext: 262144},
+		{ID: "PaddleOCR-VL-1.6-GGUF.gguf", Kind: "vl", Name: "PaddleOCR-VL-1.6-GGUF.gguf", MaxContext: 131072},
+		{ID: "Index-Translate-9B.Q4_K_M.gguf", Kind: "vl", Name: "Index-Translate-9B.Q4_K_M.gguf", MaxContext: 262144},
+		{ID: "Index-Translate-9B.Q5_K_M.gguf", Kind: "vl", Name: "Index-Translate-9B.Q5_K_M.gguf", MaxContext: 262144},
+	}
 }
 func newTestApp(t *testing.T) *App {
 	t.Helper()
@@ -43,14 +51,16 @@ func newTestApp(t *testing.T) *App {
 }
 
 type mockLlama struct {
-	mu       sync.Mutex
-	messages []chatMessage
-	tokens   int
-	block    atomic.Bool
-	started  chan struct{}
-	once     sync.Once
-	ocrCalls atomic.Int32
-	fail     atomic.Bool
+	mu             sync.Mutex
+	messages       []chatMessage
+	templateKwargs map[string]any
+	completion     map[string]any
+	tokens         int
+	block          atomic.Bool
+	started        chan struct{}
+	once           sync.Once
+	ocrCalls       atomic.Int32
+	fail           atomic.Bool
 }
 
 func newMockLlama() *mockLlama { return &mockLlama{tokens: 10, started: make(chan struct{})} }
@@ -63,17 +73,24 @@ func (m *mockLlama) handler(kind string) http.Handler {
 			writeJSON(w, 200, map[string]any{"total_slots": 1, "build_info": "b11898", "default_generation_settings": map[string]any{"n_ctx": 4096}})
 		case "/apply-template":
 			var body struct {
-				Messages []chatMessage `json:"messages"`
+				Messages           []chatMessage  `json:"messages"`
+				ChatTemplateKwargs map[string]any `json:"chat_template_kwargs"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			m.mu.Lock()
 			m.messages = body.Messages
+			m.templateKwargs = body.ChatTemplateKwargs
 			m.mu.Unlock()
 			writeJSON(w, 200, map[string]string{"prompt": "rendered prompt"})
 		case "/tokenize":
 			tokens := make([]int, m.tokens)
 			writeJSON(w, 200, map[string]any{"tokens": tokens})
 		case "/v1/chat/completions":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			m.mu.Lock()
+			m.completion = body
+			m.mu.Unlock()
 			if kind == "vl" {
 				m.ocrCalls.Add(1)
 			}
@@ -145,7 +162,7 @@ func performChat(app *App, c Conversation, body, endpoint string) *httptest.Resp
 
 func TestPromptBaseline(t *testing.T) {
 	for _, tab := range []string{TabColleague, TabDocument, TabTestcase} {
-		result := userPrompt(tab, "原文")
+		result := userPrompt(tab, "Hy-MT2-7B-Q4_K_M.gguf", "原文")
 		if !strings.HasPrefix(result, "请将以下文本翻译为日语。\n注意翻译的风格要严格符合【"+prompts[tab]+"】\n\n原文") {
 			t.Fatalf("Style 结构错误: %q", result)
 		}
@@ -165,10 +182,10 @@ func TestPromptBaseline(t *testing.T) {
 			t.Errorf("Prompt 仍包含词汇对照式内容 %q", banned)
 		}
 	}
-	if got := userPrompt(TabCustom, "完整 Prompt"); got != "完整 Prompt" {
+	if got := userPrompt(TabCustom, "Hy-MT2-7B-Q4_K_M.gguf", "完整 Prompt"); got != "完整 Prompt" {
 		t.Fatal("自由 Chat 被附加固定内容")
 	}
-	if got := userPrompt(TabJa2zh, "日文"); got != "【待翻译文本】\n日文\n\n【翻译任务】\n"+prompts[TabJa2zh] {
+	if got := userPrompt(TabJa2zh, "Hy-MT2-7B-Q4_K_M.gguf", "日文"); got != "【待翻译文本】\n日文\n\n【翻译任务】\n"+prompts[TabJa2zh] {
 		t.Fatal("日译中未保留原 Personalization 结构")
 	}
 }
@@ -181,7 +198,7 @@ func TestGenerationDefaults(t *testing.T) {
 		g.MaxTokens != 2048 {
 		t.Fatalf("默认生成参数不是 Hy-MT2 官方推荐值: %+v", g)
 	}
-	payload := generationPayload(g)
+	payload := generationPayload("Hy-MT2-7B-Q4_K_M.gguf", g)
 	if payload["temperature"] != 0.7 || payload["top_p"] != 0.6 ||
 		payload["top_k"] != 20 || payload["repeat_penalty"] != 1.05 {
 		t.Fatalf("请求载荷未带上默认采样参数: %+v", payload)

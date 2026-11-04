@@ -88,11 +88,22 @@ func (m *ModelManager) port(kind string) string {
 func (m *ModelManager) base(kind string) string { return "http://127.0.0.1:" + m.port(kind) }
 func (m *ModelManager) modelPath(kind, id string) (string, ModelInfo, error) {
 	if kind == "vl" {
-		if id != "" && id != "PaddleOCR-VL-1.6-GGUF.gguf" {
+		if id == "" {
+			id = paddleOCRModel
+		}
+		if !isImageOCRModel(id) {
 			return "", ModelInfo{}, errors.New("图像识别只能使用指定 VL 模型")
 		}
-		id = "PaddleOCR-VL-1.6-GGUF.gguf"
-		return filepath.Join(m.root, "gguf", "vl", id), ModelInfo{ID: id, Name: id, Size: fileSize(filepath.Join(m.root, "gguf", "vl", id)) + fileSize(filepath.Join(m.root, "gguf", "vl", "PaddleOCR-VL-1.6-GGUF-mmproj.gguf"))}, nil
+		if id == paddleOCRModel {
+			return filepath.Join(m.root, "gguf", "vl", id), ModelInfo{ID: id, Name: id, Kind: "vl", Size: fileSize(filepath.Join(m.root, "gguf", "vl", id)) + fileSize(filepath.Join(m.root, "gguf", "vl", paddleMMProj))}, nil
+		}
+		info, ok := m.models[id]
+		if !ok {
+			return "", ModelInfo{}, errors.New("所选模型不存在")
+		}
+		info.Kind = "vl"
+		info.Size += fileSize(filepath.Join(m.root, "gguf", "vl", indexMMProj))
+		return info.Path, info, nil
 	}
 	info, ok := m.models[id]
 	if !ok {
@@ -165,7 +176,11 @@ func (m *ModelManager) ensureLocked(ctx context.Context, kind, modelID string, r
 	}
 	args := []string{"--host", "127.0.0.1", "--port", m.port(kind), "--model", path, "--ctx-size", fmt.Sprint(ctxSize), "--threads", fmt.Sprint(settings.Threads), "--parallel", "1"}
 	if kind == "vl" {
-		mmproj := filepath.Join(m.root, "gguf", "vl", "PaddleOCR-VL-1.6-GGUF-mmproj.gguf")
+		mmprojName := paddleMMProj
+		if isIndexModel(modelID) {
+			mmprojName = indexMMProj
+		}
+		mmproj := filepath.Join(m.root, "gguf", "vl", mmprojName)
 		if _, err = os.Stat(mmproj); err != nil {
 			return errors.New("未找到 VL 配对 mmproj 文件")
 		}

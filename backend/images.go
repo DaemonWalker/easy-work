@@ -110,19 +110,24 @@ func (a *App) handleImageUpload(w http.ResponseWriter, r *http.Request) {
 	a.runOCR(ctx, taskID, task, mime, data, send)
 }
 func (a *App) runOCR(ctx context.Context, taskID string, task ImageTask, mime string, data []byte, send func(string, any)) {
+	settings := a.store.Settings()
+	model := settings.ImageOCRModel
+	if model == "" {
+		model = paddleOCRModel
+	}
 	a.tasks.Stage(taskID, "加载 VL 模型")
 	send("status", map[string]string{"stage": "加载 VL 模型"})
-	if err := a.models.Ensure(ctx, "vl", ""); err != nil {
+	if err := a.models.Ensure(ctx, "vl", model); err != nil {
 		send("error", map[string]string{"error": err.Error()})
 		return
 	}
 	a.tasks.Stage(taskID, "OCR 识别")
 	send("status", map[string]string{"stage": "OCR 识别"})
-	log.Printf("OCR 开始: task=%s image=%s filename=%s mime=%s width=%d height=%d bytes=%d", taskID, task.ID, task.Filename, mime, task.Width, task.Height, len(data))
+	log.Printf("OCR 开始: task=%s image=%s model=%s filename=%s mime=%s width=%d height=%d bytes=%d", taskID, task.ID, model, task.Filename, mime, task.Width, task.Height, len(data))
 	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 	messages := []chatMessage{{Role: "user", Content: []any{map[string]any{"type": "text", "text": "OCR:"}, map[string]any{"type": "image_url", "image_url": map[string]string{"url": url}}}}}
 	started := time.Now()
-	result, err := a.models.stream(ctx, "vl", messages, a.store.Settings().Generation, func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
+	result, err := a.models.stream(ctx, "vl", model, messages, generationFor(model, settings.Generation), func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
 	if err != nil {
 		send("error", map[string]string{"error": taskError(err)})
 		return
@@ -152,9 +157,9 @@ func (a *App) runTranslation(ctx context.Context, taskID string, task ImageTask,
 		send("error", map[string]string{"error": "没有可翻译的完整 OCR 结果"})
 		return
 	}
-	if !isTranslationModel(model) {
+	if !isImageTranslationModel(model) {
 		log.Printf("图像翻译失败: task=%s image=%s 非法模型=%s", taskID, task.ID, model)
-		send("error", map[string]string{"error": "图像翻译只能使用指定 Chat 翻译模型"})
+		send("error", map[string]string{"error": "图像翻译只能使用指定翻译模型"})
 		return
 	}
 	a.tasks.Stage(taskID, "加载翻译模型")
@@ -165,8 +170,8 @@ func (a *App) runTranslation(ctx context.Context, taskID string, task ImageTask,
 	}
 	a.tasks.Stage(taskID, "翻译 OCR 全文")
 	send("status", map[string]string{"stage": "翻译 OCR 全文"})
-	messages := []chatMessage{{Role: "user", Content: userPrompt(TabJa2zh, task.OCR)}}
-	result, err := a.models.stream(ctx, "chat", messages, a.store.Settings().Generation, func(delta string) error { send("translation_delta", map[string]string{"text": delta}); return nil })
+	messages := []chatMessage{{Role: "user", Content: userPrompt(TabJa2zh, model, task.OCR)}}
+	result, err := a.models.stream(ctx, "chat", model, messages, generationFor(model, a.store.Settings().Generation), func(delta string) error { send("translation_delta", map[string]string{"text": delta}); return nil })
 	if err != nil {
 		send("error", map[string]string{"error": taskError(err)})
 		return

@@ -47,11 +47,15 @@ func (m *ModelManager) postJSON(ctx context.Context, kind, path string, payload 
 	}
 	return json.NewDecoder(resp.Body).Decode(target)
 }
-func (m *ModelManager) countTokens(ctx context.Context, messages []chatMessage) (int, error) {
+func (m *ModelManager) countTokens(ctx context.Context, model string, messages []chatMessage) (int, error) {
 	var applied struct {
 		Prompt string `json:"prompt"`
 	}
-	if err := m.postJSON(ctx, "chat", "/apply-template", map[string]any{"messages": messages}, &applied); err != nil {
+	body := map[string]any{"messages": messages}
+	if isIndexModel(model) {
+		body["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
+	}
+	if err := m.postJSON(ctx, "chat", "/apply-template", body, &applied); err != nil {
 		return 0, fmt.Errorf("应用 Chat Template 失败: %w", err)
 	}
 	var tokenized struct {
@@ -62,7 +66,18 @@ func (m *ModelManager) countTokens(ctx context.Context, messages []chatMessage) 
 	}
 	return len(tokenized.Tokens), nil
 }
-func generationPayload(s GenerationSettings) map[string]any {
+func generationFor(model string, s GenerationSettings) GenerationSettings {
+	if isIndexModel(model) {
+		zero := 0.0
+		s.Temperature = &zero
+		s.TopP = nil
+		s.TopK = nil
+		s.MinP = nil
+		s.RepeatPenalty = nil
+	}
+	return s
+}
+func generationPayload(model string, s GenerationSettings) map[string]any {
 	out := map[string]any{"max_tokens": s.MaxTokens}
 	if s.Temperature != nil {
 		out["temperature"] = *s.Temperature
@@ -78,6 +93,9 @@ func generationPayload(s GenerationSettings) map[string]any {
 	}
 	if s.RepeatPenalty != nil {
 		out["repeat_penalty"] = *s.RepeatPenalty
+	}
+	if isIndexModel(model) {
+		out["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
 	}
 	return out
 }
@@ -103,9 +121,9 @@ func formatMessagesForLog(messages []chatMessage) string {
 	return string(data)
 }
 
-func (m *ModelManager) stream(ctx context.Context, kind string, messages []chatMessage, settings GenerationSettings, onDelta func(string) error) (result streamResult, err error) {
+func (m *ModelManager) stream(ctx context.Context, kind, model string, messages []chatMessage, settings GenerationSettings, onDelta func(string) error) (result streamResult, err error) {
 	var text strings.Builder
-	log.Printf("模型请求: kind=%s messages=%s", kind, formatMessagesForLog(messages))
+	log.Printf("模型请求: kind=%s model=%s messages=%s", kind, model, formatMessagesForLog(messages))
 	defer func() {
 		if err != nil {
 			log.Printf("模型请求失败: kind=%s error=%v\n已累计输出:\n%s", kind, err, text.String())
@@ -113,7 +131,7 @@ func (m *ModelManager) stream(ctx context.Context, kind string, messages []chatM
 		}
 		log.Printf("模型请求完成: kind=%s stats=%v\n完整输出:\n%s", kind, result.Stats, result.Text)
 	}()
-	payload := generationPayload(settings)
+	payload := generationPayload(model, settings)
 	payload["messages"] = messages
 	payload["stream"] = true
 	payload["stream_options"] = map[string]any{"include_usage": true}

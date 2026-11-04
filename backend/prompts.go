@@ -55,11 +55,17 @@ var prompts = map[string]string{
 	TabJa2zh:     ja2zhPrompt,
 }
 
-func userPrompt(tab, text string) string {
+func isZhJaTab(tab string) bool {
+	return tab == TabColleague || tab == TabDocument || tab == TabTestcase
+}
+func userPrompt(tab, model, text string) string {
 	if tab == TabCustom {
 		return text
 	}
-	if tab == TabColleague || tab == TabDocument || tab == TabTestcase {
+	if isZhJaTab(tab) && isIndexModel(model) {
+		return indexUserPrompt(tab, text)
+	}
+	if isZhJaTab(tab) {
 		return fmt.Sprintf("请将以下文本翻译为日语。\n注意翻译的风格要严格符合【%s】\n\n%s", prompts[tab], text)
 	}
 	return fmt.Sprintf("【待翻译文本】\n%s\n\n【翻译任务】\n%s", text, prompts[tab])

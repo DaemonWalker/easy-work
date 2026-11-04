@@ -159,6 +159,7 @@ func (a *App) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		Tab            string  `json:"tab"`
 		Model          *string `json:"model"`
 		ImageModel     *string `json:"image_model"`
+		ImageOCRModel  *string `json:"image_ocr_model"`
 		ImageTranslate *bool   `json:"image_translate"`
 	}
 	if decodeJSON(r, &body) != nil {
@@ -169,19 +170,27 @@ func (a *App) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "未知页面")
 		return
 	}
-	if body.Model != nil {
-		if *body.Model != "" {
-			if _, ok := a.models.models[*body.Model]; !ok {
-				fail(w, 400, "模型不存在")
-				return
-			}
-			if body.Tab != TabCustom && !isTranslationModel(*body.Model) {
+	if body.Model != nil && *body.Model != "" {
+		if _, ok := a.models.models[*body.Model]; !ok {
+			fail(w, 400, "模型不存在")
+			return
+		}
+		if !allowsModel(body.Tab, *body.Model) {
+			if body.Tab == TabJa2zh {
+				fail(w, 400, "日译中只能使用指定翻译模型")
+			} else {
 				fail(w, 400, "固定翻译场景只能使用指定翻译模型")
 			}
+			return
 		}
 	}
-	if body.ImageModel != nil && *body.ImageModel != "" && !isTranslationModel(*body.ImageModel) {
+	if body.ImageModel != nil && *body.ImageModel != "" && !isImageTranslationModel(*body.ImageModel) {
 		fail(w, 400, "图像翻译只能使用指定翻译模型")
+		return
+	}
+	if body.ImageOCRModel != nil && !isImageOCRModel(*body.ImageOCRModel) {
+		fail(w, 400, "图像识别只能使用指定 VL 模型")
+		return
 	}
 	saved, err := a.store.UpdateSettings(func(s *Settings) error {
 		if body.Tab != "" && body.Model != nil {
@@ -189,6 +198,9 @@ func (a *App) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.ImageModel != nil {
 			s.ImageModel = *body.ImageModel
+		}
+		if body.ImageOCRModel != nil {
+			s.ImageOCRModel = *body.ImageOCRModel
 		}
 		if body.ImageTranslate != nil {
 			s.ImageTranslate = *body.ImageTranslate
@@ -255,11 +267,26 @@ func validRomajiMode(mode string) bool {
 	return mode == "" || mode == "normal" || mode == "spaced" || mode == "okurigana" || mode == "furigana"
 }
 func (a *App) validateChatModel(tab, model string) error {
+	if model == "" {
+		return errors.New("请选择模型")
+	}
 	if _, ok := a.models.models[model]; !ok {
 		return errors.New("请选择可用模型")
 	}
-	if tab != TabCustom && !isTranslationModel(model) {
+	if !allowsModel(tab, model) {
+		if tab == TabJa2zh {
+			return errors.New("日译中只能使用指定翻译模型")
+		}
 		return errors.New("固定翻译场景只能使用指定翻译模型")
+	}
+	return nil
+}
+func validateConversationModel(c Conversation, model string) error {
+	if model == "" {
+		return errors.New("请选择模型")
+	}
+	if len(c.Messages) > 0 && c.Model != "" && model != c.Model {
+		return errors.New("当前对话已固定使用 " + c.Model + "，切换模型请新建对话")
 	}
 	return nil
 }
@@ -275,6 +302,10 @@ func (a *App) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "输入不能为空或格式错误")
 		return
 	}
+	if err := validateConversationModel(c, body.Model); err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
 	if err := a.validateChatModel(c.Tab, body.Model); err != nil {
 		fail(w, 400, err.Error())
 		return
@@ -288,7 +319,9 @@ func (a *App) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	defer a.tasks.Finish(taskID)
 	c, err = a.store.UpdateConversation(c.ID, func(v *Conversation) error {
-		v.Model = body.Model
+		if len(v.Messages) == 0 || v.Model == "" {
+			v.Model = body.Model
+		}
 		if body.EditID != "" {
 			for i, m := range v.Messages {
 				if m.ID == body.EditID {
@@ -316,7 +349,7 @@ func (a *App) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	a.runChat(ctx, taskID, c, body.Model, body.RomajiMode, send)
+	a.runChat(ctx, taskID, c, body.RomajiMode, send)
 }
 func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	c, ok := a.store.Conversation(r.PathValue("id"))
@@ -330,6 +363,10 @@ func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	if decodeJSON(r, &body) != nil || !validRomajiMode(body.RomajiMode) {
 		fail(w, 400, "请求格式错误")
+		return
+	}
+	if err := validateConversationModel(c, body.Model); err != nil {
+		fail(w, 400, err.Error())
 		return
 	}
 	if err := a.validateChatModel(c.Tab, body.Model); err != nil {
@@ -348,7 +385,9 @@ func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	defer a.tasks.Finish(taskID)
 	c, err = a.store.UpdateConversation(c.ID, func(v *Conversation) error {
 		v.Messages = v.Messages[:len(v.Messages)-1]
-		v.Model = body.Model
+		if v.Model == "" {
+			v.Model = body.Model
+		}
 		return nil
 	})
 	if err != nil {
@@ -359,9 +398,10 @@ func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	a.runChat(ctx, taskID, c, body.Model, body.RomajiMode, send)
+	a.runChat(ctx, taskID, c, body.RomajiMode, send)
 }
-func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model, romajiMode string, send func(string, any)) {
+func (a *App) runChat(ctx context.Context, taskID string, c Conversation, romajiMode string, send func(string, any)) {
+	model := c.Model
 	a.tasks.Stage(taskID, "加载 Chat 模型")
 	send("status", map[string]string{"stage": "加载 Chat 模型"})
 	info := a.models.models[model]
@@ -378,13 +418,13 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model,
 	for _, m := range c.Messages {
 		content := m.Content
 		if m.Role == "user" {
-			content = userPrompt(c.Tab, m.Content)
+			content = userPrompt(c.Tab, model, m.Content)
 		}
 		messages = append(messages, chatMessage{Role: m.Role, Content: content})
 	}
 	a.tasks.Stage(taskID, "检查上下文")
 	send("status", map[string]string{"stage": "检查上下文"})
-	tokens, err := a.models.countTokens(ctx, messages)
+	tokens, err := a.models.countTokens(ctx, model, messages)
 	if err != nil {
 		log.Printf("Chat Token 检查失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
 		send("error", map[string]string{"error": err.Error()})
@@ -403,7 +443,7 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, model,
 	}
 	a.tasks.Stage(taskID, "生成回复")
 	send("status", map[string]string{"stage": "生成回复"})
-	result, err := a.models.stream(ctx, "chat", messages, a.store.Settings().Generation, func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
+	result, err := a.models.stream(ctx, "chat", model, messages, generationFor(model, a.store.Settings().Generation), func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
 	if err != nil {
 		send("error", map[string]string{"error": taskError(err)})
 		return

@@ -63,7 +63,7 @@ func defaultSettings() Settings {
 	for _, tab := range modelTabs {
 		tabs[tab] = ""
 	}
-	return Settings{Theme: "cloud", Threads: runtime.NumCPU(), Context: 4096, Generation: defaultGeneration(), TabModels: tabs}
+	return Settings{Theme: "cloud", Threads: runtime.NumCPU(), Context: 4096, Generation: defaultGeneration(), TabModels: tabs, ImageOCRModel: paddleOCRModel}
 }
 
 func NewStore(dir string) (*Store, error) {
@@ -95,6 +95,9 @@ func NewStore(dir string) (*Store, error) {
 	}
 	if s.settings.Context < 1 {
 		s.settings.Context = 4096
+	}
+	if s.settings.ImageOCRModel == "" {
+		s.settings.ImageOCRModel = paddleOCRModel
 	}
 	normalizeGeneration(&s.settings.Generation)
 	return s, nil

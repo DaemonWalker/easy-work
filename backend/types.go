@@ -28,6 +28,7 @@ type Settings struct {
 	Generation     GenerationSettings `json:"generation"`
 	TabModels      map[string]string  `json:"tab_models"`
 	ImageModel     string             `json:"image_model"`
+	ImageOCRModel  string             `json:"image_ocr_model"`
 	ImageTranslate bool               `json:"image_translate"`
 }
 

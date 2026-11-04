@@ -37,16 +37,21 @@ EasyWork/
 ├── gguf/
 │   ├── chat/
 │   │   ├── Hy-MT2-7B-Q4_K_M.gguf
-│   │   └── HY-MT2-7B-Q6_K.gguf
+│   │   ├── HY-MT2-7B-Q6_K.gguf
+│   │   ├── Index-Translate-9B.Q4_K_M.gguf  # 可选，中译日推荐
+│   │   └── Index-Translate-9B.Q5_K_M.gguf  # 可选，更大、更慢
 │   └── vl/
 │       ├── PaddleOCR-VL-1.6-GGUF.gguf
-│       └── PaddleOCR-VL-1.6-GGUF-mmproj.gguf
+│       ├── PaddleOCR-VL-1.6-GGUF-mmproj.gguf
+│       └── Index-Translate-9B.mmproj-Q8_0.gguf  # 可选，配合 chat 中的 Index Q4/Q5
 └── llamacpp/
     ├── llama-server.exe
     └── ...                       # llama-server 所需 DLL 和其他文件
 ```
 
-VL 模型与对应的 mmproj 文件必须同时存在。当前实现以 llama.cpp **b11898** 为基准。
+VL 模型与对应的 mmproj 文件必须同时存在。Index VL 直接复用 `gguf/chat/` 中的 Q4/Q5 主模型，无需复制到 `gguf/vl/`。当前实现以 llama.cpp **build 11982** 为基准，已验证生成和 `/apply-template` 的 `chat_template_kwargs`；若改用 b11898，需先验证关闭 thinking 的接口。
+
+Index-Translate 可用于三个中译日 Tab、日译中 Tab、图像识别和图像翻译，固定使用对应方向的 Prompt、贪心解码并关闭 thinking。图像页分别记住识别模型与翻译模型，识别模型默认仍为 PaddleOCR-VL。接入 Index 不会修改已有模型选择，对话在首条消息后固定模型，换模型需新建对话。
 
 ### 2. 启动
 
@@ -105,7 +110,7 @@ http://127.0.0.1:18765
 .\build.ps1
 ```
 
-脚本会依次运行 Go 测试、安装前端锁定依赖、构建前端，并生成免安装目录 `build/`。随后按“准备运行目录”的结构，将 `gguf/` 和 `llamacpp/` 复制到 `build/`，再运行：
+脚本会依次运行 Go 测试、安装前端锁定依赖、构建前端，并生成免安装目录 `build/`。脚本不会自动复制新模型；随后按“准备运行目录”的结构，将 `gguf/` 和 `llamacpp/` 复制到 `build/`（Index 验证前确认两个 Index 文件位于 `build/gguf/chat/`），再运行：
 
 ```powershell
 .\build\EasyWork.exe

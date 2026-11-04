@@ -2,7 +2,7 @@ export type ModelTab='colleague'|'document'|'testcase'|'ja2zh'|'custom';
 export type Tab=ModelTab|'images'|'romaji';
 export type RomajiMode='normal'|'spaced'|'okurigana'|'furigana';
 export interface GenerationSettings{temperature:number|null;top_p:number|null;top_k:number|null;min_p:number|null;repeat_penalty:number|null;max_tokens:number}
-export interface Settings{theme:string;threads:number;context:number;generation:GenerationSettings;tab_models:Record<ModelTab,string>;image_model:string;image_translate:boolean}
+export interface Settings{theme:string;threads:number;context:number;generation:GenerationSettings;tab_models:Record<ModelTab,string>;image_model:string;image_ocr_model:string;image_translate:boolean}
 export interface Stats{[key:string]:unknown;prompt_n?:number;cache_n?:number;predicted_n?:number;total_context?:number;ttft_ms?:number;load_ms?:number;ocr_ms?:number;prompt_ms?:number;predicted_ms?:number;prompt_per_second?:number;predicted_per_second?:number}
 export interface Message{id:string;role:'user'|'assistant';content:string;model?:string;romaji_mode?:RomajiMode;stats?:Stats;created_at:string}
 export interface Conversation{id:string;tab:ModelTab;title:string;model:string;messages:Message[];context_used:number;created_at:string;updated_at:string}
