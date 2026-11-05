@@ -22,19 +22,23 @@ type GenerationSettings struct {
 }
 
 type Settings struct {
-	Theme          string             `json:"theme"`
-	Threads        int                `json:"threads"`
-	Context        int                `json:"context"`
-	Generation     GenerationSettings `json:"generation"`
-	TabModels      map[string]string  `json:"tab_models"`
-	ImageModel     string             `json:"image_model"`
-	ImageOCRModel  string             `json:"image_ocr_model"`
-	ImageTranslate bool               `json:"image_translate"`
+	Theme             string             `json:"theme"`
+	Threads           int                `json:"threads"`
+	Context           int                `json:"context"`
+	Generation        GenerationSettings `json:"generation"`
+	TabModels         map[string]string  `json:"tab_models"`
+	ImageModel        string             `json:"image_model"`
+	ImageOCRModel     string             `json:"image_ocr_model"`
+	ImageTranslate    bool               `json:"image_translate"`
+	TranslationReview bool               `json:"translation_review"`
 }
+
+const MessageReview = "review"
 
 type Message struct {
 	ID         string         `json:"id"`
 	Role       string         `json:"role"`
+	Kind       string         `json:"kind,omitempty"`
 	Content    string         `json:"content"`
 	Model      string         `json:"model,omitempty"`
 	RomajiMode string         `json:"romaji_mode,omitempty"`

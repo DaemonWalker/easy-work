@@ -48,6 +48,9 @@ func isHyMT2Model(name string) bool {
 func isIndexModel(name string) bool {
 	return name == "Index-Translate-9B.Q4_K_M.gguf" || name == "Index-Translate-9B.Q5_K_M.gguf"
 }
+func supportsTranslationReview(name string) bool {
+	return isIndexModel(name)
+}
 func isZhJaModel(name string) bool {
 	return isHyMT2Model(name) || isIndexModel(name)
 }

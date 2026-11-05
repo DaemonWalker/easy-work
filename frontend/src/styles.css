@@ -117,6 +117,8 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
 .message-action { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 .message-action:hover { background: var(--surface-2); color: var(--text); }
 .message-action svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round; }
+.translation-actions { min-height: 26px; margin: 4px 0 0; }
+.message.review .message-content { color: var(--muted); font-size: 14px; }
 .text-button { border: 0; background: none; padding: 0; color: var(--accent); font-size: 11px; }
 .edit-message textarea { width: 100%; min-height: 100px; resize: vertical; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--text); padding: 10px; }
 .edit-message > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -151,6 +153,8 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
 .composer-toolbar select { height: 29px; max-width: 100%; border: 0; border-radius: 8px; background: var(--surface-2); color: var(--text); padding: 0 26px 0 9px; font-size: 11px; }
 .model-select-label { width: 190px; }
 .romaji-select-label { width: 124px; }
+.composer-toolbar .review-toggle { height: 29px; flex-direction: row; align-items: center; gap: 6px; padding: 0 7px; border-radius: 8px; background: var(--surface-2); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.review-toggle input { margin: 0; accent-color: var(--accent); }
 .context-meter { display: grid; grid-template-columns: auto auto; gap: 2px 7px; padding: 0 4px 3px; color: var(--muted); font-size: 10px; white-space: nowrap; }
 .context-meter strong { color: var(--text); font-size: 11px; }
 .context-meter span:last-child { grid-column: 1 / -1; }

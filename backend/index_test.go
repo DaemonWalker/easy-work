@@ -354,3 +354,125 @@ func TestIndexImageOCRAndTranslation(t *testing.T) {
 		t.Fatalf("Index 图像翻译 Prompt 错误: %+v", chat.completion["messages"])
 	}
 }
+
+func performReview(app *App, c Conversation, messageID string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", "/api/chat/"+c.ID+"/review", strings.NewReader(`{"message_id":`+strconvQuote(messageID)+`}`))
+	req.SetPathValue("id", c.ID)
+	rec := httptest.NewRecorder()
+	app.handleReview(rec, req)
+	return rec
+}
+
+func TestIndexAutomaticTranslationReview(t *testing.T) {
+	mock := newMockLlama()
+	startMock(t, "18181", mock, "chat")
+	app := newTestApp(t)
+	loaded(app, "chat", testIndexModel)
+	if _, err := app.store.UpdateSettings(func(s *Settings) error { s.TranslationReview = true; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	c := createConversation(t, app, TabDocument)
+	body := `{"model":"` + testIndexModel + `","text":"原文一","romaji_mode":"spaced"}`
+	if rec := performChat(app, c, body, "send"); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	} else if !strings.Contains(rec.Body.String(), "event: translation_complete") || !strings.Contains(rec.Body.String(), "event: review_start") {
+		t.Fatalf("自动校验缺少分阶段事件: %s", rec.Body.String())
+	}
+	saved, _ := app.store.Conversation(c.ID)
+	if len(saved.Messages) != 3 || saved.Messages[1].Kind != "" || saved.Messages[2].Kind != MessageReview {
+		t.Fatalf("自动校验消息结构错误: %+v", saved.Messages)
+	}
+	mock.mu.Lock()
+	reviewMessages := append([]chatMessage{}, mock.messages...)
+	mock.mu.Unlock()
+	if len(reviewMessages) != 3 || reviewMessages[0].Content != indexUserPrompt(TabDocument, "原文一") || reviewMessages[1].Content != "完成回复" || reviewMessages[2].Content != indexReviewPrompt {
+		t.Fatalf("自动校验请求未携带原文、译文和校验 Prompt: %+v", reviewMessages)
+	}
+	if _, err := app.store.UpdateSettings(func(s *Settings) error { s.TranslationReview = false; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	body = `{"model":"` + testIndexModel + `","text":"原文二","romaji_mode":"spaced"}`
+	if rec := performChat(app, saved, body, "send"); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	saved, _ = app.store.Conversation(c.ID)
+	if len(saved.Messages) != 5 {
+		t.Fatalf("关闭开关后不应自动校验: %+v", saved.Messages)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.messages) != 3 || mock.messages[2].Content != indexUserPrompt(TabDocument, "原文二") {
+		t.Fatalf("后续翻译不应携带校验消息: %+v", mock.messages)
+	}
+}
+
+func TestIndexManualTranslationReview(t *testing.T) {
+	mock := newMockLlama()
+	startMock(t, "18181", mock, "chat")
+	app := newTestApp(t)
+	loaded(app, "chat", testIndexModel)
+	c := createConversation(t, app, TabColleague)
+	body := `{"model":"` + testIndexModel + `","text":"原文","romaji_mode":"spaced"}`
+	if rec := performChat(app, c, body, "send"); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	saved, _ := app.store.Conversation(c.ID)
+	if len(saved.Messages) != 2 {
+		t.Fatal("默认不应自动校验")
+	}
+	if rec := performReview(app, saved, saved.Messages[1].ID); rec.Code != 200 || !strings.Contains(rec.Body.String(), "event: review_start") {
+		t.Fatalf("手动校验失败: %s", rec.Body.String())
+	}
+	reviewed, _ := app.store.Conversation(c.ID)
+	if len(reviewed.Messages) != 3 || reviewed.Messages[2].Kind != MessageReview {
+		t.Fatalf("手动校验结果未保存: %+v", reviewed.Messages)
+	}
+	if rec := performReview(app, reviewed, reviewed.Messages[2].ID); rec.Code != 400 {
+		t.Fatal("校验结果不应再次作为译文校验")
+	}
+	if rec := performChat(app, reviewed, `{"model":"`+testIndexModel+`","romaji_mode":"spaced"}`, "regenerate"); rec.Code != 400 {
+		t.Fatal("校验结果不应通过普通重新生成接口")
+	}
+}
+
+func TestTranslationReviewFailureAndCapability(t *testing.T) {
+	mock := newMockLlama()
+	startMock(t, "18181", mock, "chat")
+	app := newTestApp(t)
+	loaded(app, "chat", testIndexModel)
+	c := createConversation(t, app, TabDocument)
+	if rec := performChat(app, c, `{"model":"`+testIndexModel+`","text":"原文","romaji_mode":"spaced"}`, "send"); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	saved, _ := app.store.Conversation(c.ID)
+	mock.fail.Store(true)
+	if rec := performReview(app, saved, saved.Messages[1].ID); rec.Code != 200 || !strings.Contains(rec.Body.String(), "event: error") {
+		t.Fatalf("校验失败应返回错误事件: %s", rec.Body.String())
+	}
+	current, _ := app.store.Conversation(c.ID)
+	if len(current.Messages) != 2 || current.Messages[1].Content != "完成回复" {
+		t.Fatalf("校验失败破坏了完整译文: %+v", current.Messages)
+	}
+	hy := createConversation(t, app, TabDocument)
+	hy, err := app.store.UpdateConversation(hy.ID, func(v *Conversation) error {
+		v.Model = testHyModel
+		v.Messages = []Message{{ID: "u", Role: "user", Content: "原文"}, {ID: "a", Role: "assistant", Content: "译文"}}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := performReview(app, hy, hy.Messages[1].ID); rec.Code != 400 {
+		t.Fatal("不支持校验的模型不应调用手动校验")
+	}
+}
+
+func TestTranslationReviewPreference(t *testing.T) {
+	app := newTestApp(t)
+	req := httptest.NewRequest("PUT", "/api/preferences", strings.NewReader(`{"translation_review":true}`))
+	rec := httptest.NewRecorder()
+	app.handlePreferences(rec, req)
+	if rec.Code != 200 || !app.store.Settings().TranslationReview {
+		t.Fatalf("自动校验开关未保存: %s", rec.Body.String())
+	}
+}

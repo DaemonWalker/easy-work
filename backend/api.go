@@ -34,6 +34,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/conversations", a.handleNewConversation)
 	mux.HandleFunc("POST /api/chat/{id}/send", a.handleChatSend)
 	mux.HandleFunc("POST /api/chat/{id}/regenerate", a.handleRegenerate)
+	mux.HandleFunc("POST /api/chat/{id}/review", a.handleReview)
 	mux.HandleFunc("GET /api/models/{kind}/details", a.handleModelDetails)
 	mux.HandleFunc("POST /api/models/{kind}/unload", a.handleUnload)
 	mux.HandleFunc("GET /api/images", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, a.store.Images()) })
@@ -156,11 +157,12 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Tab            string  `json:"tab"`
-		Model          *string `json:"model"`
-		ImageModel     *string `json:"image_model"`
-		ImageOCRModel  *string `json:"image_ocr_model"`
-		ImageTranslate *bool   `json:"image_translate"`
+		Tab               string  `json:"tab"`
+		Model             *string `json:"model"`
+		ImageModel        *string `json:"image_model"`
+		ImageOCRModel     *string `json:"image_ocr_model"`
+		ImageTranslate    *bool   `json:"image_translate"`
+		TranslationReview *bool   `json:"translation_review"`
 	}
 	if decodeJSON(r, &body) != nil {
 		fail(w, 400, "请求格式错误")
@@ -204,6 +206,9 @@ func (a *App) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.ImageTranslate != nil {
 			s.ImageTranslate = *body.ImageTranslate
+		}
+		if body.TranslationReview != nil {
+			s.TranslationReview = *body.TranslationReview
 		}
 		return nil
 	})
@@ -373,8 +378,8 @@ func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err.Error())
 		return
 	}
-	if len(c.Messages) == 0 || c.Messages[len(c.Messages)-1].Role != "assistant" {
-		fail(w, 400, "只有最后一条模型回复可以重新生成")
+	if len(c.Messages) == 0 || c.Messages[len(c.Messages)-1].Role != "assistant" || c.Messages[len(c.Messages)-1].Kind == MessageReview {
+		fail(w, 400, "只有最后一条普通模型回复可以重新生成")
 		return
 	}
 	taskID, ctx, err := a.tasks.Start(r.Context(), "chat")
@@ -400,6 +405,39 @@ func (a *App) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	a.runChat(ctx, taskID, c, body.RomajiMode, send)
 }
+func (a *App) handleReview(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.store.Conversation(r.PathValue("id"))
+	if !ok {
+		fail(w, 404, "对话不存在")
+		return
+	}
+	var body struct {
+		MessageID string `json:"message_id"`
+	}
+	if decodeJSON(r, &body) != nil || body.MessageID == "" {
+		fail(w, 400, "请求格式错误")
+		return
+	}
+	if !isZhJaTab(c.Tab) || !supportsTranslationReview(c.Model) {
+		fail(w, 400, "当前场景或模型不支持译文校验")
+		return
+	}
+	if _, _, ok = reviewPair(c, body.MessageID); !ok {
+		fail(w, 400, "待校验译文不存在")
+		return
+	}
+	taskID, ctx, err := a.tasks.Start(r.Context(), "chat")
+	if err != nil {
+		fail(w, 409, err.Error())
+		return
+	}
+	defer a.tasks.Finish(taskID)
+	send, err := openSSE(w)
+	if err != nil {
+		return
+	}
+	a.runReview(ctx, taskID, c, body.MessageID, send)
+}
 func (a *App) runChat(ctx context.Context, taskID string, c Conversation, romajiMode string, send func(string, any)) {
 	model := c.Model
 	a.tasks.Stage(taskID, "加载 Chat 模型")
@@ -416,6 +454,9 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, romaji
 	}
 	messages := make([]chatMessage, 0, len(c.Messages))
 	for _, m := range c.Messages {
+		if m.Kind == MessageReview {
+			continue
+		}
 		content := m.Content
 		if m.Role == "user" {
 			content = userPrompt(c.Tab, model, m.Content)
@@ -460,5 +501,83 @@ func (a *App) runChat(ctx context.Context, taskID string, c Conversation, romaji
 		return
 	}
 	log.Printf("Chat 回复已保存: task=%s conversation=%s message=%s", taskID, c.ID, assistant.ID)
+	if isZhJaTab(c.Tab) && supportsTranslationReview(model) && a.store.Settings().TranslationReview {
+		send("translation_complete", saved)
+		a.runReview(ctx, taskID, saved, assistant.ID, send)
+		return
+	}
+	send("complete", saved)
+}
+
+func reviewPair(c Conversation, translationID string) (Message, Message, bool) {
+	for i, message := range c.Messages {
+		if message.ID != translationID || message.Role != "assistant" || message.Kind != "" {
+			continue
+		}
+		for j := i - 1; j >= 0; j-- {
+			if c.Messages[j].Role == "user" {
+				return c.Messages[j], message, true
+			}
+		}
+	}
+	return Message{}, Message{}, false
+}
+
+func (a *App) runReview(ctx context.Context, taskID string, c Conversation, translationID string, send func(string, any)) {
+	model := c.Model
+	send("review_start", map[string]string{"message_id": translationID})
+	a.tasks.Stage(taskID, "加载 Chat 模型")
+	send("status", map[string]string{"stage": "加载 Chat 模型"})
+	info := a.models.models[model]
+	if info.MaxContext > 0 && a.store.Settings().Context > info.MaxContext {
+		send("error", map[string]string{"error": "当前 Chat 上下文超过模型最大能力，请修改设置"})
+		return
+	}
+	if err := a.models.Ensure(ctx, "chat", model); err != nil {
+		send("error", map[string]string{"error": err.Error()})
+		return
+	}
+	source, translation, ok := reviewPair(c, translationID)
+	if !ok {
+		send("error", map[string]string{"error": "待校验译文不存在"})
+		return
+	}
+	messages := []chatMessage{
+		{Role: "user", Content: userPrompt(c.Tab, model, source.Content)},
+		{Role: "assistant", Content: translation.Content},
+		{Role: "user", Content: indexReviewPrompt},
+	}
+	a.tasks.Stage(taskID, "检查校验上下文")
+	send("status", map[string]string{"stage": "检查校验上下文"})
+	tokens, err := a.models.countTokens(ctx, model, messages)
+	if err != nil {
+		log.Printf("校验 Token 检查失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
+		send("error", map[string]string{"error": err.Error()})
+		return
+	}
+	contextSize := a.store.Settings().Context
+	if tokens > contextSize {
+		send("error", map[string]string{"error": fmt.Sprintf("校验输入共 %d Token，超过当前实际上下文 %d", tokens, contextSize)})
+		return
+	}
+	a.tasks.Stage(taskID, "生成校验结果")
+	send("status", map[string]string{"stage": "生成校验结果"})
+	result, err := a.models.stream(ctx, "chat", model, messages, generationFor(model, a.store.Settings().Generation), func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
+	if err != nil {
+		send("error", map[string]string{"error": taskError(err)})
+		return
+	}
+	review := Message{ID: id(), Role: "assistant", Kind: MessageReview, Content: result.Text, Model: model, Stats: result.Stats, CreatedAt: time.Now().UTC()}
+	saved, err := a.store.UpdateConversation(c.ID, func(v *Conversation) error {
+		v.Messages = append(v.Messages, review)
+		v.ContextUsed = int(statNumber(result.Stats, "total_context", tokens))
+		return nil
+	})
+	if err != nil {
+		log.Printf("校验结果保存失败: task=%s conversation=%s error=%v", taskID, c.ID, err)
+		send("error", map[string]string{"error": "校验结果保存失败"})
+		return
+	}
+	log.Printf("译文校验已保存: task=%s conversation=%s translation=%s review=%s", taskID, c.ID, translationID, review.ID)
 	send("complete", saved)
 }

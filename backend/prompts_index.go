@@ -38,3 +38,10 @@ var indexPrompts = map[string]string{
 func indexUserPrompt(tab, text string) string {
 	return "请将以下中文" + indexGenres[tab] + "翻译成日语，并且严格遵循所有约束要求。\n\n【源文】\n" + text + "\n\n【约束要求】\n" + indexPrompts[tab] + "\n\n只输出译文，不要有任何额外说明。"
 }
+
+const indexReviewPrompt = `请对照最初的源文和约束要求，检查你刚才给出的日语译文。逐项检查语义是否完整准确，是否遗漏或添加信息，术语、句式、语气与场景是否符合要求，以及日语是否自然。
+用简体中文输出校验结果，严格使用以下结构：
+【校验结论】通过或需要修订
+【问题清单】逐条说明问题；如果没有问题，写“未发现问题”
+【修订译文】需要修订时给出完整修正后的日语译文；通过时原样给出原译文
+不要输出与校验无关的内容。`
