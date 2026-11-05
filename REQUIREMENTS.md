@@ -279,7 +279,7 @@ local/build/
 - 固定翻译场景使用程序内置的系统 Prompt。
 - 用户只输入原文或后续修正要求，不需要自行编写场景 Prompt。
 - 固定场景的具体 Prompt 应围绕各场景风格设计。
-- 图片文字提取使用单轮 OCR Prompt，PaddleOCR-VL 与 Index-Translate 均使用 `OCR:`；Index 同时固定贪心解码并关闭 thinking。
+- 图片文字提取使用单轮 OCR Prompt。PaddleOCR-VL 使用 `OCR:`；Index-Translate 按官方图像请求模板明确要求完整提取全部文字、保留原文语言与排版，只输出识别结果，不输出分析、总结、解释、翻译或其他额外内容，同时固定贪心解码并关闭 thinking。
 
 ### 7.6 中译日 Prompt 基准
 

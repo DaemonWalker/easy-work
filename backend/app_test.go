@@ -499,6 +499,14 @@ func TestImageOCRTranslationAndFailurePreservation(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "ocr_complete") {
 		t.Fatalf("OCR 失败: %s", rec.Body.String())
 	}
+	vl.mu.Lock()
+	ocrMessages := vl.completion["messages"].([]any)
+	ocrContent := ocrMessages[0].(map[string]any)["content"].([]any)
+	ocrPrompt := ocrContent[0].(map[string]any)["text"]
+	vl.mu.Unlock()
+	if ocrPrompt != "OCR:" {
+		t.Fatalf("PaddleOCR-VL Prompt 被修改: %q", ocrPrompt)
+	}
 	images := app.store.Images()
 	if len(images) != 1 || images[0].OCR != "日文\nEnglish 123" {
 		t.Fatalf("OCR 未完整保存: %+v", images)

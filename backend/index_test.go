@@ -325,6 +325,12 @@ func TestIndexImageOCRAndTranslation(t *testing.T) {
 	if ocrPayload["temperature"] != float64(0) || ocrPayload["chat_template_kwargs"].(map[string]any)["enable_thinking"] != false {
 		t.Fatalf("Index OCR 参数错误: %+v", ocrPayload)
 	}
+	ocrMessages := ocrPayload["messages"].([]any)
+	ocrContent := ocrMessages[0].(map[string]any)["content"].([]any)
+	wantOCRPrompt := "请完整、准确地提取图片中的全部文字，保持原文的语言、内容、顺序和换行，直接输出识别结果，不要进行任何解释。\n\n只输出图片中的文字，不得重复、遗漏或添加任何文字，不要输出分析、总结、翻译或其他额外内容。"
+	if got := ocrContent[0].(map[string]any)["text"]; got != wantOCRPrompt {
+		t.Fatalf("Index OCR Prompt 错误: %q", got)
+	}
 	images := app.store.Images()
 	if len(images) != 1 {
 		t.Fatal("Index OCR 结果未保存")

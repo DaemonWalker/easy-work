@@ -125,7 +125,11 @@ func (a *App) runOCR(ctx context.Context, taskID string, task ImageTask, mime st
 	send("status", map[string]string{"stage": "OCR 识别"})
 	log.Printf("OCR 开始: task=%s image=%s model=%s filename=%s mime=%s width=%d height=%d bytes=%d", taskID, task.ID, model, task.Filename, mime, task.Width, task.Height, len(data))
 	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
-	messages := []chatMessage{{Role: "user", Content: []any{map[string]any{"type": "text", "text": "OCR:"}, map[string]any{"type": "image_url", "image_url": map[string]string{"url": url}}}}}
+	prompt := "OCR:"
+	if isIndexModel(model) {
+		prompt = "请完整、准确地提取图片中的全部文字，保持原文的语言、内容、顺序和换行，直接输出识别结果，不要进行任何解释。\n\n只输出图片中的文字，不得重复、遗漏或添加任何文字，不要输出分析、总结、翻译或其他额外内容。"
+	}
+	messages := []chatMessage{{Role: "user", Content: []any{map[string]any{"type": "text", "text": prompt}, map[string]any{"type": "image_url", "image_url": map[string]string{"url": url}}}}}
 	started := time.Now()
 	result, err := a.models.stream(ctx, "vl", model, messages, generationFor(model, settings.Generation), func(delta string) error { send("delta", map[string]string{"text": delta}); return nil })
 	if err != nil {
