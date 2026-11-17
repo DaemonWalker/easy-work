@@ -41,8 +41,8 @@ Go 服务端（EasyWork.exe）
 
 ## 前端职责
 
-- `frontend/src/App.tsx` 负责全局状态、页面切换、轮询和任务事件分发。
-- `frontend/src/components/` 包含普通对话、图片、设置、模型状态和统计等视图。
+- `frontend/src/App.tsx` 负责全局状态、页面切换、轮询、任务事件分发和全局快捷键。
+- `frontend/src/components/` 包含普通对话、图片、设置、模型状态、统计和快捷键帮助等视图。
 - `frontend/src/api.ts` 负责同源 HTTP 请求及 SSE 解析。
 - `frontend/src/romaji.ts` 使用 Kuroshiro 在浏览器本地转换罗马音。
 - `frontend/scripts/copy-dict.mjs` 在开发或构建前，将 Kuromoji 词典复制到静态资源目录。
