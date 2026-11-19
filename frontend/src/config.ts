@@ -1,5 +1,6 @@
-import type{ModelTab,RomajiMode,Tab}from'./types';
-export const tabs:{id:Tab;label:string}[]=[{id:'colleague',label:'同事交流'},{id:'document',label:'设计书'},{id:'testcase',label:'Test Case'},{id:'ja2zh',label:'日译中'},{id:'images',label:'图像识别翻译'},{id:'custom',label:'自由 Chat'},{id:'romaji',label:'罗马音'}];
+import type{AudioSource,ModelTab,RomajiMode,Tab}from'./types';
+export const tabs:{id:Tab;label:string}[]=[{id:'colleague',label:'同事交流'},{id:'document',label:'设计书'},{id:'testcase',label:'Test Case'},{id:'ja2zh',label:'日译中'},{id:'images',label:'图像识别翻译'},{id:'custom',label:'自由 Chat'},{id:'romaji',label:'罗马音'},{id:'audio',label:'语音会议'}];
+export const audioSourceLabels:Record<AudioSource,string>={system:'电脑内声音',microphone:'麦克风',both:'电脑内声音＋麦克风'};
 export const modelTabs:ModelTab[]=['colleague','document','testcase','ja2zh','custom'];
 export const tabLabels:Record<ModelTab,string>={colleague:'同事交流',document:'设计书／式样书',testcase:'Test Case',ja2zh:'日译中',custom:'自由 Chat'};
 export const placeholders:Record<ModelTab,string>={colleague:'输入中文短句；后续也可以输入修正要求',document:'输入设计书／式样书中的中文短句',testcase:'输入一句操作步骤、确认项或期待值',ja2zh:'输入需要理解的日文',custom:'输入完整 Prompt，自行描述任务和内容'};

@@ -26,7 +26,7 @@ $LocalPath = Join-Path $Root 'local'
 $BuildPath = Join-Path $LocalPath 'build'
 if (Test-Path $BuildPath) {
     Get-ChildItem -Force $BuildPath |
-        Where-Object { $_.Name -notin @('gguf', 'llamacpp') } |
+        Where-Object { $_.Name -notin @('gguf', 'llamacpp', 'whispercpp') } |
         Remove-Item -Recurse -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $BuildPath 'html'), (Join-Path $BuildPath 'history'), (Join-Path $BuildPath 'log') | Out-Null

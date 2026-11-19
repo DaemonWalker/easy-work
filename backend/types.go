@@ -31,6 +31,9 @@ type Settings struct {
 	ImageOCRModel     string             `json:"image_ocr_model"`
 	ImageTranslate    bool               `json:"image_translate"`
 	TranslationReview bool               `json:"translation_review"`
+	AudioSource       string             `json:"audio_source"`
+	WhisperModel      string             `json:"whisper_model"`
+	AudioChatModel    string             `json:"audio_chat_model"`
 }
 
 const MessageReview = "review"
@@ -71,6 +74,49 @@ type ImageTask struct {
 	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
+type AudioSegment struct {
+	ID               string         `json:"id"`
+	StartMS          int64          `json:"start_ms"`
+	EndMS            int64          `json:"end_ms"`
+	Source           string         `json:"source"`
+	Translation      string         `json:"translation"`
+	Status           string         `json:"status"`
+	RecognitionStats map[string]any `json:"recognition_stats,omitempty"`
+	TranslationStats map[string]any `json:"translation_stats,omitempty"`
+	RecognizedAt     time.Time      `json:"recognized_at"`
+	TranslatedAt     *time.Time     `json:"translated_at,omitempty"`
+}
+
+type AudioMeeting struct {
+	ID           string         `json:"id"`
+	Source       string         `json:"source"`
+	WhisperModel string         `json:"whisper_model"`
+	ChatModel    string         `json:"chat_model"`
+	Segments     []AudioSegment `json:"segments"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	EndedAt      *time.Time     `json:"ended_at,omitempty"`
+}
+
+type AudioSessionState struct {
+	Meeting            AudioMeeting `json:"meeting"`
+	Status             string       `json:"status"`
+	Recording          bool         `json:"recording"`
+	Processing         bool         `json:"processing"`
+	PendingRecognition int          `json:"pending_recognition"`
+	PendingTranslation int          `json:"pending_translation"`
+	RecognitionDelayMS int64        `json:"recognition_delay_ms"`
+	TranslationDelayMS int64        `json:"translation_delay_ms"`
+	Error              string       `json:"error,omitempty"`
+}
+
+type WhisperModel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
 type ModelInfo struct {
 	ID         string         `json:"id"`
 	Kind       string         `json:"kind"`
@@ -99,11 +145,14 @@ type GlobalState struct {
 }
 
 type StateResponse struct {
-	Settings Settings      `json:"settings"`
-	Models   []ModelInfo   `json:"models"`
-	Status   []ModelStatus `json:"status"`
-	Task     GlobalState   `json:"task"`
-	Hardware Hardware      `json:"hardware"`
+	Settings      Settings           `json:"settings"`
+	Models        []ModelInfo        `json:"models"`
+	Status        []ModelStatus      `json:"status"`
+	Task          GlobalState        `json:"task"`
+	Hardware      Hardware           `json:"hardware"`
+	WhisperModels []WhisperModel     `json:"whisper_models"`
+	Whisper       ModelStatus        `json:"whisper"`
+	Audio         *AudioSessionState `json:"audio,omitempty"`
 }
 
 type Hardware struct {

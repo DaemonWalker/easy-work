@@ -48,6 +48,15 @@ func isHyMT2Model(name string) bool {
 func isIndexModel(name string) bool {
 	return name == "Index-Translate-9B.Q4_K_M.gguf" || name == "Index-Translate-9B.Q5_K_M.gguf"
 }
+func isAudioIndexModel(name string) bool {
+	return name == "Index-Translate-2B.Q4_K_M.gguf" || name == "Index-Translate-2B.Q3_K_M.gguf"
+}
+func isIndexGenerationModel(name string) bool {
+	return isIndexModel(name) || isAudioIndexModel(name)
+}
+func isAudioTranslationModel(name string) bool {
+	return isJaZhModel(name) || isAudioIndexModel(name)
+}
 func supportsTranslationReview(name string) bool {
 	return isIndexModel(name)
 }

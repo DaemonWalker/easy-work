@@ -12,12 +12,15 @@ Go 服务端（EasyWork.exe）
     ├── 提供 html/ 静态页面和本地词典
     ├── 提供 /api/*，保存 history/
     ├── 全局任务互斥与停止
-    └── 启动、监控并代理 llama-server
-             ├── Chat：127.0.0.1:18181
-             └── VL：  127.0.0.1:18182
+    ├── WASAPI 连续音频采集与语音分段
+    ├── 启动、监控并代理 llama-server
+    │            ├── Chat：127.0.0.1:18181
+    │            └── VL：  127.0.0.1:18182
+    └── 启动、监控并代理 whisper-server
+                 └── Whisper：127.0.0.1:18183
 ```
 
-浏览器不直接访问 llama-server。对外服务默认绑定 `127.0.0.1:18765`，使用 `-lan` 时绑定 `0.0.0.0:18765`；两个模型端口仅用于本机进程间通信。
+浏览器不直接访问 llama-server 或 whisper-server。对外服务默认绑定 `127.0.0.1:18765`，使用 `-lan` 时绑定 `0.0.0.0:18765`；三个模型端口仅用于本机进程间通信。
 
 源码仓库中的构建产物、模型、运行数据和本地分析资料统一放在已忽略的 `local/`。服务端仍以 `EasyWork.exe` 所在目录为运行根目录，因此开发构建的运行根目录是 `local/build/`，发布版内部的相对路径不变。
 
@@ -30,42 +33,54 @@ Go 服务端（EasyWork.exe）
 | `backend/main.go` | 启动参数、监听地址、浏览器打开和退出清理 |
 | `backend/logging.go` | 控制台与文件双写、按天切换和文件不可用时的控制台降级 |
 | `backend/api.go` | HTTP 路由、参数校验、对话与模型 API |
-| `backend/models.go` | 模型扫描、内存检查、加载／卸载、健康检查与崩溃恢复 |
+| `backend/audio_api.go` | 连续音频模型、会议、会话操作和 SSE API |
+| `backend/models.go` | Chat/VL 模型扫描、内存检查、加载／卸载、健康检查与崩溃恢复 |
+| `backend/whisper.go` | Whisper 模型扫描、独立进程监管、推理、停止与崩溃恢复 |
 | `backend/stream.go` | llama.cpp 流式响应、统计信息与 SSE 转发 |
 | `backend/images.go` | 图片校验、OCR、重试与翻译流程 |
+| `backend/audio.go` | 连续会议、识别优先队列、顺序补译、补全、订阅和会话清理 |
+| `backend/audio_capture.go` | PCM 转换、混音、WAV 和连续语音分段 |
+| `backend/audio_wasapi_*.go` | 纯 Go Windows WASAPI 系统 loopback、麦克风与混合采集 |
 | `backend/task.go` | 全局任务状态、互斥和取消 |
-| `backend/store.go` | 设置、对话与图片任务的 JSON 持久化 |
+| `backend/store.go` | 设置、对话、图片任务和音频会议的 JSON 持久化 |
 | `backend/gguf.go` | GGUF 元数据读取 |
 | `backend/process_*.go` | 平台相关的进程管理；Windows 使用 Job Object 清理子进程 |
 | `backend/hardware_*.go` | CPU 与内存采样 |
 
+WASAPI 由 Go 直接通过 Windows COM 接口调用，不使用浏览器采集、CGo、Python 或 FFmpeg。系统声音是默认渲染设备的系统混音，不是 Zoom 专属采集，也不采集局域网客户端。音频统一转换为 16 kHz 单声道 PCM WAV；连续采集经过预卷和静音端点检测形成多个语音段，不是单段录音上传。
+
 ## 前端职责
 
 - `frontend/src/App.tsx` 负责全局状态、页面切换、轮询、任务事件分发和全局快捷键。
-- `frontend/src/components/` 包含普通对话、图片、设置、模型状态、统计和快捷键帮助等视图。
-- `frontend/src/api.ts` 负责同源 HTTP 请求及 SSE 解析。
+- `frontend/src/components/` 包含普通对话、图片、设置、模型状态、统计、快捷键帮助及独立 `AudioView.tsx` 连续语音页面。
+- `frontend/src/api.ts` 负责同源 HTTP 请求及 POST/GET SSE 解析。
 - `frontend/src/romaji.ts` 使用 Kuroshiro 在浏览器本地转换罗马音。
 - `frontend/scripts/copy-dict.mjs` 在开发或构建前，将 Kuromoji 词典复制到静态资源目录。
 
 页面每 2 秒刷新服务端状态。普通回复通过 SSE 流式显示，罗马音在完整日文回复到达后于浏览器生成。Index 中译日自动校验使用同一 SSE 连接中的 `translation_complete`、`review_start`、`delta` 和 `complete` 事件切换两个阶段；手动校验复用独立 `/api/chat/{id}/review` 接口。
 
+连续语音页面通过 `/api/audio/sessions/{id}/events` 接收 `snapshot`、`state`、`recognition_start`、`recognized`、`translation_start`、`translation_delta`、`translated`、`error` 和 `complete`。`recognized` 先提供完整日文原文；`translation_delta` 只进入明确标记的未完成草稿；只有 `translated` 才能把中文标记为完整译文。SSE 断开时前端每 2 秒重连，离开页面不会因此停止后端采集。
+
 ## 必须保持的运行约束
 
 ### 全局互斥
 
-所有翻译、自由 Chat、OCR 和图像翻译共享一个全局任务管理器。同一时刻最多执行一个模型任务；忙碌时直接拒绝新任务，**不排队，也不并行推理**。
+所有翻译、自由 Chat、OCR、图像翻译和连续音频识别／补全共享一个全局任务管理器。同一时刻最多执行一个模型任务；忙碌时直接拒绝新任务，**不排队，也不并行推理**。
 
-停止操作必须取消服务端上下文并传播到实际 llama-server 请求，不能只隐藏前端进度。
+连续会议持有全局任务直至录音和处理结束或用户停止。会话内识别队列优先于翻译队列，但 Whisper 与 Chat 仍严格顺序执行：翻译落后时先完成积压原文，中文按段后补；识别落后时继续采集，不主动丢弃旧段。录音状态与模型处理状态分别展示。
+
+停止操作必须取消服务端上下文并传播到实际模型请求。停止 Whisper 时终止当前 whisper-server，先标记预期退出，不能误触发崩溃恢复；Chat 继续使用 Context 取消。只停止录音会保留处理队列并继续补全，停止整个会话才同时取消采集与处理。
 
 ### 模型生命周期
 
 - 选择模型、切换页面或查看历史不应触发加载。
 - 只有真正执行任务时才加载或切换模型。
-- 最多保留一个 Chat 和一个 VL 进程，同类模型不能同时加载多个。
-- Chat 和 VL 分别管理状态与卸载，但模型切换操作本身需要串行化。
+- 最多保留一个 Chat 和一个 VL 进程，同类模型不能同时加载多个；Whisper 由独立管理器加载一个模型。
+- Chat 和 VL 分别管理状态与卸载，但模型切换操作本身需要串行化。Whisper 不套用 Chat/VL 卸载接口。
 - 启动 Chat 前可用内存低于 4 GB 时卸载已加载的 VL，启动 VL 前可用内存低于 2 GB 时卸载已加载的 Chat。内存阈值只用于模型切换，不会因内存不足拒绝加载。
 - VL 必须加载配对的 mmproj 文件。
-- 退出时清理所有由服务端启动的模型进程；异常重启不得无限重试。
+- whisper-server 固定从 `whispercpp/whisper-server.exe` 启动并监听 `127.0.0.1:18183`，健康检查使用 `/health`，WAV 识别使用 `/inference`。
+- 退出时先停止音频会话、等待采集和处理退出、关闭音频 SSE，再清理所有由服务端启动的 Whisper/Chat/VL 进程；异常重启不得无限重试。
 
 ### 数据一致性
 
@@ -74,16 +89,19 @@ Go 服务端（EasyWork.exe）
 - Index 中译日自动校验先保存完整译文，再发起第二次请求；校验停止或失败不得破坏译文，不完整校验结果及统计不持久化。校验消息不进入后续普通翻译上下文。
 - 图片 OCR 成功后立即保存原图和完整 OCR 结果。后续翻译失败或停止，不得破坏已保存的 OCR。
 - 不完整 OCR 或翻译不能覆盖此前完整结果。
-- 设置、页面模型选择、图像翻译开关和中译日自动校验开关由服务端共享；独立罗马音页面的转换模式不持久化。
+- 音频会议先保存完整识别原文、时间码和识别统计，再保存完整译文和翻译统计。待翻译、识别失败、流式半截译文及其统计不持久化为完整结果。
+- 临时 WAV 位于 `history/audio/<meeting>/`，在识别积压、失败、停止或待翻译时保留，完整翻译后删除。会后补全当前只恢复同一后端进程中的活动会话；服务重启后完整会议历史可读，但不重建未完成采集队列。
+- 设置、页面模型选择、音频音源与模型选择、图像翻译开关和中译日自动校验开关由服务端共享；独立罗马音页面的转换模式不持久化。
 
 ### 离线与安全
 
 - 页面、字体、词典和运行依赖均使用本地资源，不增加 CDN 或在线 API。
-- 模型能力按场景判断：三个中译日 Tab、日译中 Tab 和图像翻译允许 Hy-MT2 与 Index-Translate Q4/Q5；图像识别可选 PaddleOCR-VL 或 Index-Translate Q4/Q5；自由 Chat 可使用 `gguf/chat/` 中的其他 Chat 模型。Index VL 复用 `gguf/chat/` 中的主模型，并配对 `gguf/vl/Index-Translate-9B.mmproj-Q8_0.gguf`。
+- 模型能力按场景判断：三个中译日 Tab、日译中 Tab 和图像翻译允许 Hy-MT2 与 Index-Translate 9B Q4/Q5；图像识别可选 PaddleOCR-VL 或 Index-Translate 9B Q4/Q5；自由 Chat 可使用 `gguf/chat/` 中的其他 Chat 模型。Index VL 复用 `gguf/chat/` 中的主模型，并配对 `gguf/vl/Index-Translate-9B.mmproj-Q8_0.gguf`。
+- 连续语音翻译除上述日译中模型外，还允许 `Index-Translate-2B.Q4_K_M.gguf` 和 Q3_K_M；该扩展不放宽普通页面的模型白名单。Whisper 模型仅扫描 `gguf/whisper/` 下的 `.bin` 和 `.gguf`。
 - Prompt 按「模型 + Tab」路由：Hy-MT2 保持 Style/Personalization，Index 中译日使用 `backend/prompts_index.go` 内置的 instTrans 结构，按 `【源文】`、`【约束要求】` 和编号硬约束／软约束组织，不使用 few-shot 样例；Index 日译中使用独立日译中 Prompt，不复用中译日 Prompt；不读取本地分析目录。
-- 对话在首条消息后固定模型；历史用户消息统一按对话模型包装。Index 请求固定贪心解码，并在生成和 `/apply-template` 中传 `chat_template_kwargs={"enable_thinking":false}`。
+- 对话在首条消息后固定模型；历史用户消息统一按对话模型包装。Index 请求固定贪心解码，并在生成和 `/apply-template` 中传 `chat_template_kwargs={"enable_thinking":false}`，音频 Index 2B 也遵循此规则。
 - 默认仅监听本机。`-lan` 是无认证模式，不要把它描述为安全的多用户系统。
-- 不开放自定义模型路径、llama-server 路径或端口等需求明确排除的配置。
+- 不开放自定义模型路径、llama-server、whisper-server 路径或端口等需求明确排除的配置。
 
 ## 持久化文件
 
@@ -93,13 +111,16 @@ Go 服务端（EasyWork.exe）
 | `history/conversations.json` | 各普通页面的独立对话历史 |
 | `history/images.json` | 图片任务元数据、OCR 和翻译结果 |
 | `history/images/` | 原始图片 |
+| `history/audio.json` | 音频会议、完整原文、完整译文、时间码和完整统计 |
+| `history/audio/` | 按会议和语音段组织的临时 WAV |
 | `log/easywork-YYYY-MM-DD.log` | 后端关键操作、错误、完整请求与模型输出 |
 | `log/chat-server-YYYY-MM-DD.log` | Chat llama-server 输出 |
 | `log/vl-server-YYYY-MM-DD.log` | VL llama-server 输出 |
+| `log/whisper-server-YYYY-MM-DD.log` | whisper-server 输出 |
 
 JSON 写入采用临时文件加重命名。修改存储结构时应考虑已有数据读取，避免无提示破坏用户历史。
 
-三类日志均同时输出到控制台，按本地日期每日拆分并永久保留。文件创建或写入失败时仅降级到控制台，不影响服务运行。日志包含完整文本，可能含有敏感信息。
+四类日志均同时输出到控制台，按本地日期每日拆分并永久保留。文件创建或写入失败时仅降级到控制台，不影响服务运行。日志包含完整文本，可能含有敏感信息。
 
 ## 扩展时的检查点
 

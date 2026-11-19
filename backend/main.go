@@ -66,7 +66,14 @@ func main() {
 	}
 	hardware := newHardwareMonitor()
 	manager := NewModelManager(root, store, hardware, models)
-	app := &App{root: root, store: store, models: manager, tasks: NewTaskManager(), hardware: hardware, modelList: models}
+	whisperModels, err := scanWhisperModels(root)
+	if err != nil {
+		log.Printf("扫描 Whisper 模型失败: %v", err)
+	}
+	whisper := NewWhisperManager(root, store, whisperModels)
+	tasks := NewTaskManager()
+	audio := NewAudioManager(store, manager, tasks, whisper, newWASAPICapture)
+	app := &App{root: root, store: store, models: manager, tasks: tasks, hardware: hardware, modelList: models, audio: audio}
 	address := "127.0.0.1:18765"
 	if *lan {
 		address = "0.0.0.0:18765"
@@ -74,6 +81,7 @@ func main() {
 	server := &http.Server{Addr: address, Handler: app.routes(), ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second}
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
+		audio.Close()
 		manager.Close()
 		log.Fatalf("监听失败: %v", err)
 	}
@@ -93,6 +101,7 @@ func main() {
 	log.Printf("正在退出并清理模型进程…")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	audio.Close()
 	_ = server.Shutdown(ctx)
 	manager.Close()
 }

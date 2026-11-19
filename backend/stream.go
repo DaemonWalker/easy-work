@@ -52,7 +52,7 @@ func (m *ModelManager) countTokens(ctx context.Context, model string, messages [
 		Prompt string `json:"prompt"`
 	}
 	body := map[string]any{"messages": messages}
-	if isIndexModel(model) {
+	if isIndexGenerationModel(model) {
 		body["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
 	}
 	if err := m.postJSON(ctx, "chat", "/apply-template", body, &applied); err != nil {
@@ -67,7 +67,7 @@ func (m *ModelManager) countTokens(ctx context.Context, model string, messages [
 	return len(tokenized.Tokens), nil
 }
 func generationFor(model string, s GenerationSettings) GenerationSettings {
-	if isIndexModel(model) {
+	if isIndexGenerationModel(model) {
 		zero := 0.0
 		s.Temperature = &zero
 		s.TopP = nil
@@ -94,7 +94,7 @@ func generationPayload(model string, s GenerationSettings) map[string]any {
 	if s.RepeatPenalty != nil {
 		out["repeat_penalty"] = *s.RepeatPenalty
 	}
-	if isIndexModel(model) {
+	if isIndexGenerationModel(model) {
 		out["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
 	}
 	return out

@@ -4,7 +4,7 @@
 
 ## 项目速览
 
-EasyWork 是 Windows 11 x64 上的完全离线中日翻译与图像识别工具：Go 后端提供页面和 API、管理 llama.cpp 进程并持久化数据；React + TypeScript + Vite 构建前端。
+EasyWork 是 Windows 11 x64 上的完全离线中日翻译、图像识别与连续语音翻译工具：Go 后端提供页面和 API、通过纯 Go WASAPI 采集音频、管理 llama.cpp/whisper.cpp 进程并持久化数据；React + TypeScript + Vite 构建前端。
 
 ## 按需阅读
 
@@ -33,6 +33,6 @@ go -C backend test ./...
 .\build.ps1
 ```
 
-仅需单独构建前端时，在 `frontend/` 执行 `npm ci` 和 `npm run build`。注意 `build.ps1` 会保留 `local/build/gguf/` 和 `local/build/llamacpp/`，但清理 `local/build/` 中的其他内容，执行前提醒用户备份需要保留的运行数据与日志；使用 `-Package` 可在构建后生成 `local/EasyWork.7z`。
+仅需单独构建前端时，在 `frontend/` 执行 `npm ci` 和 `npm run build`。注意 `build.ps1` 会保留 `local/build/gguf/`、`local/build/llamacpp/` 和 `local/build/whispercpp/`，但清理 `local/build/` 中的其他内容（仍包括 `history/` 和 `log/`），执行前提醒用户备份需要保留的运行数据与日志；使用 `-Package` 可在构建后生成 `local/EasyWork.7z`。
 
 涉及真实模型、Windows 进程或浏览器交互的改动，应进行端到端验证；无法验证时明确说明，不把 mock 测试当作真实模型验证。

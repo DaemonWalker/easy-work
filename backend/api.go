@@ -19,6 +19,7 @@ type App struct {
 	tasks     *TaskManager
 	hardware  *hardwareMonitor
 	modelList []ModelInfo
+	audio     *AudioManager
 }
 
 func (a *App) routes() http.Handler {
@@ -37,6 +38,14 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/chat/{id}/review", a.handleReview)
 	mux.HandleFunc("GET /api/models/{kind}/details", a.handleModelDetails)
 	mux.HandleFunc("POST /api/models/{kind}/unload", a.handleUnload)
+	mux.HandleFunc("GET /api/audio/models", a.handleAudioModels)
+	mux.HandleFunc("GET /api/audio/meetings", a.handleAudioMeetings)
+	mux.HandleFunc("POST /api/audio/sessions", a.handleAudioStart)
+	mux.HandleFunc("GET /api/audio/sessions/{id}", a.handleAudioSession)
+	mux.HandleFunc("GET /api/audio/sessions/{id}/events", a.handleAudioEvents)
+	mux.HandleFunc("POST /api/audio/sessions/{id}/recording/stop", a.handleAudioStopRecording)
+	mux.HandleFunc("POST /api/audio/sessions/{id}/stop", a.handleAudioStop)
+	mux.HandleFunc("POST /api/audio/sessions/{id}/resume", a.handleAudioResume)
 	mux.HandleFunc("GET /api/images", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, a.store.Images()) })
 	mux.HandleFunc("POST /api/images", a.handleImageUpload)
 	mux.HandleFunc("POST /api/images/{id}/retry", func(w http.ResponseWriter, r *http.Request) { a.handleImageRetry(w, r, r.PathValue("id")) })
@@ -74,7 +83,13 @@ func (a *App) serveStatic(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(a.root, "html", "index.html"))
 }
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, StateResponse{Settings: a.store.Settings(), Models: a.modelList, Status: a.models.Statuses(), Task: a.tasks.State(), Hardware: a.hardware.Sample()})
+	state := StateResponse{Settings: a.store.Settings(), Models: a.modelList, Status: a.models.Statuses(), Task: a.tasks.State(), Hardware: a.hardware.Sample(), WhisperModels: []WhisperModel{}, Whisper: ModelStatus{Kind: "whisper", Status: "unloaded"}}
+	if a.audio != nil {
+		state.WhisperModels = a.audio.whisper.Models()
+		state.Whisper = a.audio.whisper.Status()
+		state.Audio = a.audio.Current()
+	}
+	writeJSON(w, 200, state)
 }
 
 var validThemes = map[string]bool{"cloud": true, "paper": true, "green": true, "ice": true, "graphite": true, "midnight": true, "black": true, "sakura": true, "lavender": true, "sunset": true, "contrast-light": true, "contrast-dark": true}
@@ -150,6 +165,11 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 			log.Printf("设置变更触发模型重载: kinds=%v", kinds)
 			if err := a.models.Reload(kinds...); err != nil {
 				log.Printf("设置重载失败: %v", err)
+			}
+			if old.Threads != next.Threads && a.audio != nil {
+				if err := a.audio.whisper.Reload(); err != nil {
+					log.Printf("Whisper 设置重载失败: %v", err)
+				}
 			}
 		}()
 	}

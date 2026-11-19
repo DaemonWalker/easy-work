@@ -18,6 +18,7 @@ type Store struct {
 	settings      Settings
 	conversations []Conversation
 	images        []ImageTask
+	audio         []AudioMeeting
 }
 
 // 默认生成参数取 Hy-MT2 官方 README 对 1.8B/7B 的推荐值。
@@ -68,7 +69,7 @@ func defaultSettings() Settings {
 
 func NewStore(dir string) (*Store, error) {
 	s := &Store{dir: dir, settings: defaultSettings()}
-	for _, sub := range []string{"", "images"} {
+	for _, sub := range []string{"", "images", "audio"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
 			return nil, err
 		}
@@ -80,6 +81,9 @@ func NewStore(dir string) (*Store, error) {
 		return nil, err
 	}
 	if err := s.read("images.json", &s.images); err != nil {
+		return nil, err
+	}
+	if err := s.read("audio.json", &s.audio); err != nil {
 		return nil, err
 	}
 	if s.settings.TabModels == nil {
@@ -283,4 +287,57 @@ func (s *Store) UpdateImage(id string, fn func(*ImageTask) error) (ImageTask, er
 		}
 	}
 	return ImageTask{}, os.ErrNotExist
+}
+
+func (s *Store) AudioMeetings() []AudioMeeting {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]AudioMeeting, len(s.audio))
+	for i, meeting := range s.audio {
+		out[i] = clone(meeting)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	return out
+}
+func (s *Store) AudioMeeting(id string) (AudioMeeting, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, meeting := range s.audio {
+		if meeting.ID == id {
+			return clone(meeting), true
+		}
+	}
+	return AudioMeeting{}, false
+}
+func (s *Store) AddAudioMeeting(meeting AudioMeeting) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	all := append([]AudioMeeting{meeting}, s.audio...)
+	if err := s.saveLocked("audio.json", all); err != nil {
+		return err
+	}
+	s.audio = all
+	return nil
+}
+func (s *Store) UpdateAudioMeeting(id string, fn func(*AudioMeeting) error) (AudioMeeting, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.audio {
+		if s.audio[i].ID != id {
+			continue
+		}
+		next := clone(s.audio[i])
+		if err := fn(&next); err != nil {
+			return AudioMeeting{}, err
+		}
+		next.UpdatedAt = now()
+		all := append([]AudioMeeting{}, s.audio...)
+		all[i] = next
+		if err := s.saveLocked("audio.json", all); err != nil {
+			return AudioMeeting{}, err
+		}
+		s.audio = all
+		return clone(next), nil
+	}
+	return AudioMeeting{}, os.ErrNotExist
 }

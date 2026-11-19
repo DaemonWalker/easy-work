@@ -27,6 +27,7 @@ func testModels() []ModelInfo {
 		{ID: "HY-MT2-7B-Q6_K.gguf", Kind: "chat", Name: "HY-MT2-7B-Q6_K.gguf", Path: "q6.gguf", MaxContext: 8192},
 		{ID: "Index-Translate-9B.Q4_K_M.gguf", Kind: "chat", Name: "Index-Translate-9B.Q4_K_M.gguf", Path: "index-q4.gguf", MaxContext: 262144},
 		{ID: "Index-Translate-9B.Q5_K_M.gguf", Kind: "chat", Name: "Index-Translate-9B.Q5_K_M.gguf", Path: "index-q5.gguf", MaxContext: 262144},
+		{ID: "Index-Translate-2B.Q4_K_M.gguf", Kind: "chat", Name: "Index-Translate-2B.Q4_K_M.gguf", Path: "index-2b-q4.gguf", MaxContext: 262144},
 		{ID: "PaddleOCR-VL-1.6-GGUF.gguf", Kind: "vl", Name: "PaddleOCR-VL-1.6-GGUF.gguf", MaxContext: 131072},
 		{ID: "Index-Translate-9B.Q4_K_M.gguf", Kind: "vl", Name: "Index-Translate-9B.Q4_K_M.gguf", MaxContext: 262144},
 		{ID: "Index-Translate-9B.Q5_K_M.gguf", Kind: "vl", Name: "Index-Translate-9B.Q5_K_M.gguf", MaxContext: 262144},
@@ -60,6 +61,7 @@ type mockLlama struct {
 	started        chan struct{}
 	once           sync.Once
 	ocrCalls       atomic.Int32
+	chatCalls      atomic.Int32
 	fail           atomic.Bool
 }
 
@@ -93,6 +95,8 @@ func (m *mockLlama) handler(kind string) http.Handler {
 			m.mu.Unlock()
 			if kind == "vl" {
 				m.ocrCalls.Add(1)
+			} else {
+				m.chatCalls.Add(1)
 			}
 			if m.block.Load() {
 				m.once.Do(func() { close(m.started) })
