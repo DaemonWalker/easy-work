@@ -31,8 +31,24 @@ func TestIndexPromptComposition(t *testing.T) {
 	}
 }
 
+func TestIndexDevelopmentPromptComposition(t *testing.T) {
+	scenes := map[string]string{
+		TabGitCommit:   indexGitCommitPrompt,
+		TabCodeComment: indexCodeCommentPrompt,
+	}
+	for tab, scene := range scenes {
+		want := indexCommonPrompt + "\n" + indexDevelopmentFormatPrompt + "\n" + scene
+		if got := indexPrompts[tab]; got != want {
+			t.Errorf("%s 未按通用段、格式段和场景段拼装", tab)
+		}
+		if !strings.Contains(scene, "【注意】") {
+			t.Errorf("%s 的文体应作为 instTrans 软约束", tab)
+		}
+	}
+}
+
 func TestIndexPromptBaselineAndRouting(t *testing.T) {
-	for _, tab := range []string{TabColleague, TabDocument, TabTestcase} {
+	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment} {
 		for _, model := range []string{"Index-Translate-9B.Q4_K_M.gguf", "Index-Translate-9B.Q5_K_M.gguf"} {
 			want := indexUserPrompt(tab, "原文")
 			got := userPrompt(tab, model, "原文")
@@ -63,7 +79,7 @@ func TestIndexPromptBaselineAndRouting(t *testing.T) {
 }
 
 func TestModelCapability(t *testing.T) {
-	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabJa2zh} {
+	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment, TabJa2zh} {
 		for _, model := range []string{testHyModel, "HY-MT2-7B-Q6_K.gguf", "Index-Translate-9B.Q4_K_M.gguf", "Index-Translate-9B.Q5_K_M.gguf"} {
 			if !allowsModel(tab, model) {
 				t.Errorf("%s 应允许 %s", tab, model)
@@ -85,7 +101,7 @@ func TestModelCapability(t *testing.T) {
 
 func TestIndexModelPreferences(t *testing.T) {
 	app := newTestApp(t)
-	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabJa2zh} {
+	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment, TabJa2zh} {
 		body := `{"tab":` + strconvQuote(tab) + `,"model":` + strconvQuote(testIndexModel) + `}`
 		req := httptest.NewRequest("PUT", "/api/preferences", strings.NewReader(body))
 		rec := httptest.NewRecorder()

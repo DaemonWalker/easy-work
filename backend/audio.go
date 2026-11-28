@@ -41,6 +41,7 @@ type AudioSession struct {
 	manager     *AudioManager
 	meeting     AudioMeeting
 	capture     audioCapture
+	recorder    *audioRecorder
 	ctx         context.Context
 	cancel      context.CancelFunc
 	taskID      string
@@ -69,7 +70,9 @@ type AudioManager struct {
 }
 
 func NewAudioManager(store *Store, models *ModelManager, tasks *TaskManager, whisper whisperService, factory captureFactory) *AudioManager {
-	return &AudioManager{store: store, models: models, tasks: tasks, whisper: whisper, newCapture: factory, sessions: map[string]*AudioSession{}}
+	manager := &AudioManager{store: store, models: models, tasks: tasks, whisper: whisper, newCapture: factory, sessions: map[string]*AudioSession{}}
+	manager.recoverAfterRestart()
+	return manager
 }
 
 func validAudioSource(source string) bool {
@@ -127,13 +130,20 @@ func (m *AudioManager) Start(source, whisperModel, chatModel string) (AudioSessi
 		return AudioSessionState{}, errors.New("音频设置保存失败")
 	}
 	n := now()
-	meeting := AudioMeeting{ID: id(), Source: source, WhisperModel: whisperModel, ChatModel: chatModel, Segments: []AudioSegment{}, CreatedAt: n, UpdatedAt: n}
+	meeting := AudioMeeting{ID: id(), Source: source, WhisperModel: whisperModel, ChatModel: chatModel, Segments: []AudioSegment{}, Recording: &AudioRecording{Status: "recording"}, CreatedAt: n, UpdatedAt: n}
+	recorder, err := newAudioRecorder(audioRecordingPath(m.store.dir, meeting.ID))
+	if err != nil {
+		m.tasks.Finish(taskID)
+		return AudioSessionState{}, errors.New("完整录音创建失败: " + err.Error())
+	}
 	if err = m.store.AddAudioMeeting(meeting); err != nil {
+		_ = recorder.Close()
+		_ = os.RemoveAll(filepath.Dir(audioRecordingPath(m.store.dir, meeting.ID)))
 		m.tasks.Finish(taskID)
 		return AudioSessionState{}, errors.New("音频会议保存失败")
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	session := &AudioSession{manager: m, meeting: meeting, capture: capture, ctx: ctx, cancel: cancel, taskID: taskID, recording: true, processing: true, status: "recording", notify: make(chan struct{}, 1), subscribers: map[chan audioEvent]struct{}{}, runDone: make(chan struct{}), captureDone: make(chan struct{})}
+	session := &AudioSession{manager: m, meeting: meeting, capture: capture, recorder: recorder, ctx: ctx, cancel: cancel, taskID: taskID, recording: true, processing: true, status: "recording", notify: make(chan struct{}, 1), subscribers: map[chan audioEvent]struct{}{}, runDone: make(chan struct{}), captureDone: make(chan struct{})}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -186,27 +196,52 @@ func (m *AudioManager) run(session *AudioSession, capture bool) {
 func (s *AudioSession) runCapture() {
 	defer close(s.captureDone)
 	segmenter := &audioSegmenter{}
-	err := s.capture.Run(func(samples []int16) error { return segmenter.Push(samples, s.enqueue) })
+	err := s.capture.Run(func(samples []int16) error {
+		if err := s.recorder.Write(samples); err != nil {
+			return err
+		}
+		return segmenter.Push(samples, s.enqueue)
+	})
 	if err == nil && s.ctx.Err() == nil {
 		err = segmenter.Flush(s.enqueue)
 	}
 	_ = s.capture.Close()
+	recordingErr := s.recorder.Close()
+	recording := AudioRecording{Status: "error"}
+	if recordingErr == nil {
+		if savedRecording, infoErr := audioRecordingInfo(audioRecordingPath(s.manager.store.dir, s.meeting.ID)); infoErr == nil {
+			recording = savedRecording
+		} else {
+			recordingErr = infoErr
+		}
+	}
 	s.mu.Lock()
 	s.recording = false
 	if err != nil && s.ctx.Err() == nil {
 		s.lastError = err.Error()
 	}
+	if recordingErr != nil {
+		s.lastError = "完整录音保存失败: " + recordingErr.Error()
+	}
 	n := now()
 	s.meeting.EndedAt = &n
-	s.mu.Unlock()
-	if _, updateErr := s.manager.store.UpdateAudioMeeting(s.meeting.ID, func(meeting *AudioMeeting) error {
+	saved, updateErr := s.manager.store.UpdateAudioMeeting(s.meeting.ID, func(meeting *AudioMeeting) error {
 		meeting.EndedAt = &n
+		meeting.Recording = &recording
 		return nil
-	}); updateErr != nil {
+	})
+	if updateErr == nil {
+		s.meeting = saved
+	}
+	s.mu.Unlock()
+	if updateErr != nil {
 		s.reportError("", "录音结束状态保存失败: "+updateErr.Error())
 	}
 	if err != nil && s.ctx.Err() == nil {
 		s.reportError("", "音频采集失败: "+err.Error())
+	}
+	if recordingErr != nil {
+		s.reportError("", "完整录音保存失败: "+recordingErr.Error())
 	}
 	s.signal()
 	s.publishState()
@@ -565,6 +600,14 @@ func (s *AudioSession) snapshotLocked() AudioSessionState {
 				if delay > state.TranslationDelayMS {
 					state.TranslationDelayMS = delay
 				}
+			}
+		}
+	}
+	if !s.recording && !s.processing {
+		for _, work := range s.order {
+			if work.status != audioComplete {
+				state.CanResume = true
+				break
 			}
 		}
 	}

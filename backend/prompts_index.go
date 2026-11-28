@@ -23,16 +23,26 @@ const indexTestcasePrompt = `3. 【硬性要求】全文使用简洁、明确的
 8. 【硬性要求】操作词 checkin→チェックイン、login→ログイン、modal→モーダル；画面名、字段名、变量名和占位符保持原样。
 9. 【注意】根据原文实际含义选择最简洁自然的测试用例表达，不混淆显示、保存、更新等不同结果。`
 
+const indexDevelopmentFormatPrompt = `3. 【硬性要求】代码标识符、API 名称、变量名、文件名、路径、占位符、代码结构及换行、缩进、编号等原有格式保持原样，只翻译中文说明，不为符合风格删减信息。`
+
+const indexGitCommitPrompt = `4. 【注意】使用日本软件开发团队自然、简洁、客观的 Git Commit 日语，使用常体，优先体言止め或动词基本形，不使用敬语或自谦语；根据原文语义选择句式，不机械统一句尾。`
+
+const indexCodeCommentPrompt = `4. 【注意】使用日本软件开发团队简洁、客观的代码注释日语，根据原文语义选择名词短语或常体句，不使用敬语或自谦语；不机械统一句式。`
+
 var indexGenres = map[string]string{
-	TabColleague: "同事交流消息",
-	TabDocument:  "设计书",
-	TabTestcase:  "Test Case",
+	TabColleague:   "同事交流消息",
+	TabDocument:    "设计书",
+	TabTestcase:    "Test Case",
+	TabGitCommit:   "Git Commit 消息",
+	TabCodeComment: "代码注释",
 }
 
 var indexPrompts = map[string]string{
-	TabColleague: indexCommonPrompt + "\n" + indexColleaguePrompt,
-	TabDocument:  indexCommonPrompt + "\n" + indexDocumentPrompt,
-	TabTestcase:  indexCommonPrompt + "\n" + indexTestcasePrompt,
+	TabColleague:   indexCommonPrompt + "\n" + indexColleaguePrompt,
+	TabDocument:    indexCommonPrompt + "\n" + indexDocumentPrompt,
+	TabTestcase:    indexCommonPrompt + "\n" + indexTestcasePrompt,
+	TabGitCommit:   indexCommonPrompt + "\n" + indexDevelopmentFormatPrompt + "\n" + indexGitCommitPrompt,
+	TabCodeComment: indexCommonPrompt + "\n" + indexDevelopmentFormatPrompt + "\n" + indexCodeCommentPrompt,
 }
 
 func indexUserPrompt(tab, text string) string {

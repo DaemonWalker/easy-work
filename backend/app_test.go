@@ -165,7 +165,7 @@ func performChat(app *App, c Conversation, body, endpoint string) *httptest.Resp
 }
 
 func TestPromptBaseline(t *testing.T) {
-	for _, tab := range []string{TabColleague, TabDocument, TabTestcase} {
+	for _, tab := range []string{TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment} {
 		result := userPrompt(tab, "Hy-MT2-7B-Q4_K_M.gguf", "原文")
 		if !strings.HasPrefix(result, "请将以下文本翻译为日语。\n注意翻译的风格要严格符合【"+prompts[tab]+"】\n\n原文") {
 			t.Fatalf("Style 结构错误: %q", result)
@@ -185,6 +185,15 @@ func TestPromptBaseline(t *testing.T) {
 		if strings.Contains(all, banned) {
 			t.Errorf("Prompt 仍包含词汇对照式内容 %q", banned)
 		}
+	}
+	development := prompts[TabGitCommit] + prompts[TabCodeComment]
+	for _, check := range []string{"语义强度", "动作方向", "主客体", "文件名", "路径", "占位符", "代码结构", "原有格式", "不使用敬语或自谦语"} {
+		if !strings.Contains(development, check) {
+			t.Errorf("开发场景 Prompt 缺少 %q", check)
+		}
+	}
+	if !strings.Contains(prompts[TabGitCommit], "优先体言止め或动词基本形") || !strings.Contains(prompts[TabCodeComment], "名词短语或常体句") {
+		t.Fatal("Git Commit 与代码注释的文体规则未区分")
 	}
 	if got := userPrompt(TabCustom, "Hy-MT2-7B-Q4_K_M.gguf", "完整 Prompt"); got != "完整 Prompt" {
 		t.Fatal("自由 Chat 被附加固定内容")

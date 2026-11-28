@@ -229,11 +229,7 @@ func (s *audioSegmenter) flush(emit func(capturedAudio) error) error {
 	return emit(segment)
 }
 
-func writeWAV(path string, samples []int16) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	dataSize := len(samples) * 2
+func wavHeader(dataSize int) []byte {
 	header := make([]byte, 44)
 	copy(header, "RIFF")
 	binary.LittleEndian.PutUint32(header[4:], uint32(36+dataSize))
@@ -247,6 +243,15 @@ func writeWAV(path string, samples []int16) error {
 	binary.LittleEndian.PutUint16(header[34:], 16)
 	copy(header[36:], "data")
 	binary.LittleEndian.PutUint32(header[40:], uint32(dataSize))
+	return header
+}
+
+func writeWAV(path string, samples []int16) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	dataSize := len(samples) * 2
+	header := wavHeader(dataSize)
 	file, err := os.Create(path + ".tmp")
 	if err != nil {
 		return err

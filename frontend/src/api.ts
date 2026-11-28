@@ -16,3 +16,6 @@ export const getAudioMeetings=()=>request<AudioMeeting[]>('/api/audio/meetings')
 export const getAudioSession=(id:string)=>request<AudioSessionState>(`/api/audio/sessions/${encodeURIComponent(id)}`);
 export const startAudioSession=(source:AudioSource,whisperModel:string,chatModel:string)=>request<AudioSessionState>('/api/audio/sessions',{method:'POST',headers:jsonHeaders,body:JSON.stringify({source,whisper_model:whisperModel,chat_model:chatModel})});
 export const audioSessionAction=(id:string,action:'recording/stop'|'stop'|'resume')=>request<AudioSessionState>(`/api/audio/sessions/${encodeURIComponent(id)}/${action}`,{method:'POST'});
+export const startAudioTranscription=(id:string,whisperModel:string)=>request<AudioSessionState>(`/api/audio/meetings/${encodeURIComponent(id)}/transcriptions`,{method:'POST',headers:jsonHeaders,body:JSON.stringify({whisper_model:whisperModel})});
+export const translateAudioTranscription=(id:string,transcriptionId:string,chatModel:string)=>request<AudioSessionState>(`/api/audio/meetings/${encodeURIComponent(id)}/transcriptions/${encodeURIComponent(transcriptionId)}/translate`,{method:'POST',headers:jsonHeaders,body:JSON.stringify({chat_model:chatModel})});
+export const deleteAudioRecording=(id:string)=>request<AudioSessionState>(`/api/audio/meetings/${encodeURIComponent(id)}/recording`,{method:'DELETE'});

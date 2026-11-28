@@ -1,8 +1,9 @@
-export type ModelTab='colleague'|'document'|'testcase'|'ja2zh'|'custom';
-export type Tab=ModelTab|'images'|'romaji'|'audio';
+export type ZhJaScene='colleague'|'document'|'testcase'|'gitcommit'|'codecomment';
+export type ModelTab=ZhJaScene|'ja2zh'|'custom';
+export type Tab='zh2ja'|'ja2zh'|'custom'|'images'|'romaji'|'audio';
 export type RomajiMode='normal'|'spaced'|'okurigana'|'furigana';
 export interface GenerationSettings{temperature:number|null;top_p:number|null;top_k:number|null;min_p:number|null;repeat_penalty:number|null;max_tokens:number}
-export interface Settings{theme:string;threads:number;context:number;generation:GenerationSettings;tab_models:Record<ModelTab,string>;image_model:string;image_ocr_model:string;image_translate:boolean;translation_review:boolean;audio_source:string;whisper_model:string;audio_chat_model:string}
+export interface Settings{theme:string;threads:number;context:number;generation:GenerationSettings;tab_models:Record<ModelTab,string>;image_model:string;image_ocr_model:string;image_translate:boolean;translation_review:boolean;audio_source:string;whisper_model:string;audio_chat_model:string;audio_transcription_model:string;audio_transcription_chat_model:string}
 export interface Stats{[key:string]:unknown;prompt_n?:number;cache_n?:number;predicted_n?:number;total_context?:number;ttft_ms?:number;load_ms?:number;ocr_ms?:number;prompt_ms?:number;predicted_ms?:number;prompt_per_second?:number;predicted_per_second?:number}
 export interface Message{id:string;role:'user'|'assistant';kind?:'review';content:string;model?:string;romaji_mode?:RomajiMode;stats?:Stats;created_at:string}
 export interface Conversation{id:string;tab:ModelTab;title:string;model:string;messages:Message[];context_used:number;created_at:string;updated_at:string}
@@ -12,8 +13,10 @@ export interface GlobalTask{busy:boolean;task_id:string;kind:string;stage:string
 export interface Hardware{cpu:number;memory_used:number;memory_total:number;memory_available:number;refresh_seconds:number}
 export type AudioSource='system'|'microphone'|'both';
 export interface AudioSegment{id:string;start_ms:number;end_ms:number;source:string;translation:string;status:string;recognition_stats?:Stats;translation_stats?:Stats;recognized_at:string;translated_at?:string}
-export interface AudioMeeting{id:string;source:AudioSource;whisper_model:string;chat_model:string;segments:AudioSegment[];created_at:string;updated_at:string;ended_at?:string}
-export interface AudioSessionState{meeting:AudioMeeting;status:string;recording:boolean;processing:boolean;pending_recognition:number;pending_translation:number;recognition_delay_ms:number;translation_delay_ms:number;error?:string}
+export interface AudioRecording{status:'recording'|'ready'|'error';size:number;duration_ms:number}
+export interface AudioTranscription{id:string;whisper_model:string;chat_model?:string;translate:boolean;status:string;segments:AudioSegment[];created_at:string;updated_at:string;ended_at?:string}
+export interface AudioMeeting{id:string;source:AudioSource;whisper_model:string;chat_model:string;segments:AudioSegment[];recording?:AudioRecording;transcriptions?:AudioTranscription[];created_at:string;updated_at:string;ended_at?:string}
+export interface AudioSessionState{meeting:AudioMeeting;status:string;recording:boolean;processing:boolean;can_resume:boolean;pending_recognition:number;pending_translation:number;recognition_delay_ms:number;translation_delay_ms:number;error?:string}
 export interface WhisperModel{id:string;name:string;path:string;size:number}
 export interface State{settings:Settings;models:ModelInfo[];status:ModelStatus[];task:GlobalTask;hardware:Hardware;whisper_models:WhisperModel[];whisper:ModelStatus;audio?:AudioSessionState}
 export interface ImageTask{id:string;filename:string;mime:string;width:number;height:number;ocr:string;translation:string;ocr_stats?:Stats;translation_stats?:Stats;created_at:string;updated_at:string}

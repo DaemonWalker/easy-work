@@ -44,19 +44,29 @@ const testcasePrompt = `自然简洁的日文测试用例，全文用常体，�
 ・前置条件（原文含「已经」「…済」）：用「～済みである」「～していること」表达状态，不写成操作步骤。
 原文一句对应一条，不拆句也不合并；不添加原文没有的操作、确认项和预期值；不加「操作手順：」「期待結果：」一类标签。`
 
+const developmentFidelity = `保持原文语义和语义强度，不改变动作方向、主客体、否定、可能性、条件、范围或逻辑关系，不增删信息。
+代码标识符、API 名称、变量名、文件名、路径、占位符、代码结构和原有格式保持原样，只翻译中文说明。
+只输出日语译文，不添加解释或原文没有的标记。`
+
+const gitCommitPrompt = `使用日本软件开发团队自然、简洁、客观的 Git Commit 日语，使用常体，优先体言止め或动词基本形，不使用敬语或自谦语；根据原文语义选择句式，不为统一句式删减信息。`
+
+const codeCommentPrompt = `使用日本软件开发团队简洁、客观的代码注释日语，根据原文语义选择名词短语或常体句，不使用敬语或自谦语；不机械统一句式，不为符合风格删减信息。`
+
 const ja2zhPrompt = `翻译为自然、流畅的简体中文，准确完整优先；保留原文的语气、条件、范围、否定和因果关系。
 英文、代码、变量名、数值、URL 原样保留；段落、换行和编号照原文分段，长文按段全译，不摘要、不增删、不加注释。
 只输出译文。`
 
 var prompts = map[string]string{
-	TabColleague: colleaguePrompt + zhJaFidelity,
-	TabDocument:  documentPrompt + zhJaFidelity,
-	TabTestcase:  testcasePrompt + zhJaFidelity,
-	TabJa2zh:     ja2zhPrompt,
+	TabColleague:   colleaguePrompt + zhJaFidelity,
+	TabDocument:    documentPrompt + zhJaFidelity,
+	TabTestcase:    testcasePrompt + zhJaFidelity,
+	TabGitCommit:   gitCommitPrompt + developmentFidelity,
+	TabCodeComment: codeCommentPrompt + developmentFidelity,
+	TabJa2zh:       ja2zhPrompt,
 }
 
 func isZhJaTab(tab string) bool {
-	return tab == TabColleague || tab == TabDocument || tab == TabTestcase
+	return tab == TabColleague || tab == TabDocument || tab == TabTestcase || tab == TabGitCommit || tab == TabCodeComment
 }
 func userPrompt(tab, model, text string) string {
 	if tab == TabCustom {

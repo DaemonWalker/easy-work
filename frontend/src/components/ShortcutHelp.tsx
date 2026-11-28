@@ -1,5 +1,5 @@
 import{useEffect,useRef}from'react';
-const globalShortcuts:[string,string][]=[['Alt + 1～8','切换八个功能页面'],['Alt + 9','打开设置／返回之前页面'],['Alt + I','聚焦当前页面输入框或音源选择'],['Alt + M','打开／关闭实际模型状态'],['Ctrl + .','停止当前模型任务或整个语音会话'],['F1 / Ctrl + /','打开键盘快捷键帮助'],['Esc','关闭帮助或模型详情／取消消息编辑']];
+const globalShortcuts:[string,string][]=[['Alt + 1～6','切换六个功能页面'],['Alt + 7','打开设置／返回之前页面'],['Alt + I','聚焦当前页面输入框或音源选择'],['Alt + M','打开／关闭实际模型状态'],['Ctrl + .','停止当前模型任务或整个语音会话'],['F1 / Ctrl + /','打开键盘快捷键帮助'],['Esc','关闭帮助或模型详情／取消消息编辑']];
 const chatShortcuts:[string,string][]=[['Ctrl + Enter','发送消息／保存编辑并重新发送'],['Alt + N','新建对话'],['Alt + B','收起／展开历史侧栏'],['Alt + E','编辑最后一条用户消息'],['Alt + R','重新生成最后一条回复']];
 const imageShortcuts:[string,string][]=[['Alt + N / Alt + U','选择图片并识别'],['Alt + O','重试当前图片的 OCR'],['Alt + T','翻译／重新翻译当前 OCR 结果']];
 const audioShortcuts:[string,string][]=[['Alt + N','新建语音会议'],['Alt + S','开始录音／停止录音并继续处理'],['Alt + X / Ctrl + .','停止整个语音会话并保留完整结果'],['Alt + R','会后补全未完成语音段'],['Alt + B','收起／展开会议历史']];

@@ -3,14 +3,16 @@ package main
 import "time"
 
 const (
-	TabColleague = "colleague"
-	TabDocument  = "document"
-	TabTestcase  = "testcase"
-	TabJa2zh     = "ja2zh"
-	TabCustom    = "custom"
+	TabColleague   = "colleague"
+	TabDocument    = "document"
+	TabTestcase    = "testcase"
+	TabGitCommit   = "gitcommit"
+	TabCodeComment = "codecomment"
+	TabJa2zh       = "ja2zh"
+	TabCustom      = "custom"
 )
 
-var modelTabs = []string{TabColleague, TabDocument, TabTestcase, TabJa2zh, TabCustom}
+var modelTabs = []string{TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment, TabJa2zh, TabCustom}
 
 type GenerationSettings struct {
 	Temperature   *float64 `json:"temperature"`
@@ -22,18 +24,20 @@ type GenerationSettings struct {
 }
 
 type Settings struct {
-	Theme             string             `json:"theme"`
-	Threads           int                `json:"threads"`
-	Context           int                `json:"context"`
-	Generation        GenerationSettings `json:"generation"`
-	TabModels         map[string]string  `json:"tab_models"`
-	ImageModel        string             `json:"image_model"`
-	ImageOCRModel     string             `json:"image_ocr_model"`
-	ImageTranslate    bool               `json:"image_translate"`
-	TranslationReview bool               `json:"translation_review"`
-	AudioSource       string             `json:"audio_source"`
-	WhisperModel      string             `json:"whisper_model"`
-	AudioChatModel    string             `json:"audio_chat_model"`
+	Theme                       string             `json:"theme"`
+	Threads                     int                `json:"threads"`
+	Context                     int                `json:"context"`
+	Generation                  GenerationSettings `json:"generation"`
+	TabModels                   map[string]string  `json:"tab_models"`
+	ImageModel                  string             `json:"image_model"`
+	ImageOCRModel               string             `json:"image_ocr_model"`
+	ImageTranslate              bool               `json:"image_translate"`
+	TranslationReview           bool               `json:"translation_review"`
+	AudioSource                 string             `json:"audio_source"`
+	WhisperModel                string             `json:"whisper_model"`
+	AudioChatModel              string             `json:"audio_chat_model"`
+	AudioTranscriptionModel     string             `json:"audio_transcription_model"`
+	AudioTranscriptionChatModel string             `json:"audio_transcription_chat_model"`
 }
 
 const MessageReview = "review"
@@ -87,15 +91,35 @@ type AudioSegment struct {
 	TranslatedAt     *time.Time     `json:"translated_at,omitempty"`
 }
 
-type AudioMeeting struct {
+type AudioRecording struct {
+	Status     string `json:"status"`
+	Size       int64  `json:"size"`
+	DurationMS int64  `json:"duration_ms"`
+}
+
+type AudioTranscription struct {
 	ID           string         `json:"id"`
-	Source       string         `json:"source"`
 	WhisperModel string         `json:"whisper_model"`
-	ChatModel    string         `json:"chat_model"`
+	ChatModel    string         `json:"chat_model,omitempty"`
+	Translate    bool           `json:"translate"`
+	Status       string         `json:"status"`
 	Segments     []AudioSegment `json:"segments"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	EndedAt      *time.Time     `json:"ended_at,omitempty"`
+}
+
+type AudioMeeting struct {
+	ID             string               `json:"id"`
+	Source         string               `json:"source"`
+	WhisperModel   string               `json:"whisper_model"`
+	ChatModel      string               `json:"chat_model"`
+	Segments       []AudioSegment       `json:"segments"`
+	Recording      *AudioRecording      `json:"recording,omitempty"`
+	Transcriptions []AudioTranscription `json:"transcriptions,omitempty"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+	EndedAt        *time.Time           `json:"ended_at,omitempty"`
 }
 
 type AudioSessionState struct {
@@ -103,6 +127,7 @@ type AudioSessionState struct {
 	Status             string       `json:"status"`
 	Recording          bool         `json:"recording"`
 	Processing         bool         `json:"processing"`
+	CanResume          bool         `json:"can_resume"`
 	PendingRecognition int          `json:"pending_recognition"`
 	PendingTranslation int          `json:"pending_translation"`
 	RecognitionDelayMS int64        `json:"recognition_delay_ms"`

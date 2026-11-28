@@ -74,7 +74,7 @@ func isImageTranslationModel(name string) bool {
 }
 func allowsModel(tab, model string) bool {
 	switch tab {
-	case TabColleague, TabDocument, TabTestcase:
+	case TabColleague, TabDocument, TabTestcase, TabGitCommit, TabCodeComment:
 		return isZhJaModel(model)
 	case TabJa2zh:
 		return isJaZhModel(model)

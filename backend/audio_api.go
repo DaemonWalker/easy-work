@@ -25,6 +25,77 @@ func (a *App) handleAudioMeetings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, a.audio.Meetings())
 }
+func (a *App) handleAudioRecording(w http.ResponseWriter, r *http.Request) {
+	if a.audio == nil {
+		fail(w, http.StatusServiceUnavailable, "音频服务未初始化")
+		return
+	}
+	meeting, ok := a.store.AudioMeeting(r.PathValue("id"))
+	if !ok || meeting.Recording == nil || meeting.Recording.Status != "ready" {
+		fail(w, 404, "完整录音不存在或尚未保存完成")
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment")
+	http.ServeFile(w, r, audioRecordingPath(a.store.dir, meeting.ID))
+}
+func (a *App) handleAudioDeleteRecording(w http.ResponseWriter, r *http.Request) {
+	if a.audio == nil {
+		fail(w, http.StatusServiceUnavailable, "音频服务未初始化")
+		return
+	}
+	state, err := a.audio.DeleteRecording(r.PathValue("id"))
+	if err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, state)
+}
+func (a *App) handleAudioTranscribe(w http.ResponseWriter, r *http.Request) {
+	if a.audio == nil {
+		fail(w, http.StatusServiceUnavailable, "音频服务未初始化")
+		return
+	}
+	var body struct {
+		WhisperModel string `json:"whisper_model"`
+	}
+	if decodeJSON(r, &body) != nil {
+		fail(w, 400, "请求格式错误")
+		return
+	}
+	state, err := a.audio.StartTranscription(r.PathValue("id"), body.WhisperModel)
+	if err != nil {
+		status := 400
+		if errors.Is(err, errBusy) {
+			status = 409
+		}
+		fail(w, status, err.Error())
+		return
+	}
+	writeJSON(w, 201, state)
+}
+func (a *App) handleAudioTranslateTranscription(w http.ResponseWriter, r *http.Request) {
+	if a.audio == nil {
+		fail(w, http.StatusServiceUnavailable, "音频服务未初始化")
+		return
+	}
+	var body struct {
+		ChatModel string `json:"chat_model"`
+	}
+	if decodeJSON(r, &body) != nil {
+		fail(w, 400, "请求格式错误")
+		return
+	}
+	state, err := a.audio.StartTranslation(r.PathValue("id"), r.PathValue("transcription"), body.ChatModel)
+	if err != nil {
+		status := 400
+		if errors.Is(err, errBusy) {
+			status = 409
+		}
+		fail(w, status, err.Error())
+		return
+	}
+	writeJSON(w, 200, state)
+}
 func (a *App) handleAudioStart(w http.ResponseWriter, r *http.Request) {
 	if a.audio == nil {
 		fail(w, http.StatusServiceUnavailable, "音频服务未初始化")
